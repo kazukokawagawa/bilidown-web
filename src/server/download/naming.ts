@@ -60,12 +60,14 @@ export interface OutputPlan {
   fileName: string;
 }
 
+export type OutputExtension = ".mp4" | ".m4a" | ".m4s" | ".mkv";
+
 export function planOutputPath(options: {
   downloadDir: string;
   namingTemplate: string;
   isMultiPage: boolean;
   context: NamingContext;
-  extension: ".mp4" | ".m4a" | ".m4s";
+  extension: OutputExtension;
 }): OutputPlan {
   const { downloadDir, namingTemplate, isMultiPage, context, extension } = options;
   if (isMultiPage) {

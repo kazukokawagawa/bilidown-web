@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useVideo } from "@/hooks/use-video";
+import { useSystemInfo } from "@/hooks/use-settings";
 import { DownloadPanel } from "./download-panel";
 import { ParseInput } from "./parse-input";
 import { PartsList } from "./parts-list";
@@ -46,6 +47,7 @@ export function HomeContent() {
     selectedCodec,
     selectedStream,
     audioOnly,
+    embedSubtitles,
     parsing,
     streamsLoading,
     creating,
@@ -56,8 +58,13 @@ export function HomeContent() {
     selectQn,
     selectCodec,
     setAudioOnly,
+    setEmbedSubtitles,
     createDownloads,
   } = useVideo();
+
+  const { info: systemInfo } = useSystemInfo();
+  // 系统信息加载中先允许选择，避免误禁用；加载完成后按 ffmpeg 实际可用性判断
+  const ffmpegAvailable = systemInfo ? systemInfo.ffmpeg.available : true;
 
   const queryInput = searchParams.get("input");
 
@@ -124,6 +131,8 @@ export function HomeContent() {
               selectedQn={selectedQn}
               selectedCodec={selectedCodec}
               audioOnly={audioOnly}
+              embedSubtitles={embedSubtitles}
+              ffmpegAvailable={ffmpegAvailable}
               isLogin={isLogin}
               loading={streamsLoading || parsing}
               disabled={parsing}
@@ -131,6 +140,7 @@ export function HomeContent() {
               onQnChange={selectQn}
               onCodecChange={selectCodec}
               onAudioOnlyChange={setAudioOnly}
+              onEmbedSubtitlesChange={setEmbedSubtitles}
             />
             <DownloadPanel
               video={video}
@@ -138,6 +148,8 @@ export function HomeContent() {
               qn={selectedQn}
               codec={selectedCodec}
               audioOnly={audioOnly}
+              embedSubtitles={embedSubtitles}
+              ffmpegAvailable={ffmpegAvailable}
               stream={selectedStream}
               creating={creating}
               disabled={!canDownload}

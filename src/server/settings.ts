@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS } from "@/lib/constants";
+import { DEFAULT_SETTINGS, MAX_DOWNLOAD_THREADS, MIN_DOWNLOAD_THREADS } from "@/lib/constants";
 import type { AppSettings, BiliCookie, Codec, PublicSettings } from "@/lib/types";
 
 import { readJsonFile, SETTINGS_FILE, writeJsonAtomic } from "./paths";
@@ -97,6 +97,11 @@ export function normalizeSettings(raw: unknown): AppSettings {
     autoCheckUpdate: normalizeBoolean(raw.autoCheckUpdate, DEFAULT_SETTINGS.autoCheckUpdate),
     saveTaskHistory: normalizeBoolean(raw.saveTaskHistory, DEFAULT_SETTINGS.saveTaskHistory),
     deleteTempAfterMerge: normalizeBoolean(raw.deleteTempAfterMerge, DEFAULT_SETTINGS.deleteTempAfterMerge),
+    downloadThreads:
+      typeof raw.downloadThreads === "number" && Number.isFinite(raw.downloadThreads)
+        ? clampInt(raw.downloadThreads, MIN_DOWNLOAD_THREADS, MAX_DOWNLOAD_THREADS)
+        : DEFAULT_SETTINGS.downloadThreads,
+    embedSubtitles: normalizeBoolean(raw.embedSubtitles, DEFAULT_SETTINGS.embedSubtitles),
   };
 }
 
@@ -157,6 +162,20 @@ export function normalizeSettingsPatch(raw: unknown): Partial<AppSettings> {
   if ("theme" in raw) {
     if (!isTheme(raw.theme)) throw new SettingsValidationError("theme 必须是 light / dark / system 之一");
     patch.theme = raw.theme;
+  }
+  if ("downloadThreads" in raw) {
+    const value = raw.downloadThreads;
+    if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+      throw new SettingsValidationError("downloadThreads 必须是整数");
+    }
+    if (value < MIN_DOWNLOAD_THREADS || value > MAX_DOWNLOAD_THREADS) {
+      throw new SettingsValidationError(`downloadThreads 取值范围为 ${MIN_DOWNLOAD_THREADS}~${MAX_DOWNLOAD_THREADS}`);
+    }
+    patch.downloadThreads = value;
+  }
+  if ("embedSubtitles" in raw) {
+    if (typeof raw.embedSubtitles !== "boolean") throw new SettingsValidationError("embedSubtitles 必须是布尔值");
+    patch.embedSubtitles = raw.embedSubtitles;
   }
   for (const key of ["clipboardWatch", "autoCheckUpdate", "saveTaskHistory", "deleteTempAfterMerge"] as const) {
     if (key in raw) {

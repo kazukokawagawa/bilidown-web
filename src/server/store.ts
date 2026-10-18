@@ -19,7 +19,7 @@ const VALID_STATUSES: ReadonlyArray<TaskStatus> = [
   "cancelled",
 ];
 const VALID_CODECS: ReadonlyArray<Codec> = ["avc", "hevc", "av1"];
-const VALID_FORMATS: ReadonlyArray<DownloadTask["format"]> = ["mp4", "m4a", "m4s"];
+const VALID_FORMATS: ReadonlyArray<DownloadTask["format"]> = ["mp4", "m4a", "m4s", "mkv"];
 
 interface StoreState {
   timer: ReturnType<typeof setTimeout> | null;
@@ -98,6 +98,8 @@ export function normalizeTask(raw: unknown): DownloadTask | null {
     finishedAt: nullableNum(raw.finishedAt),
     sourceUrl: str(raw.sourceUrl, `https://www.bilibili.com/video/${bvid}`),
     audioOnly: raw.audioOnly === true,
+    embedSubtitles: raw.embedSubtitles === true,
+    subtitleCount: Math.max(0, Math.trunc(num(raw.subtitleCount, 0))),
   };
 }
 

@@ -19,7 +19,12 @@ import { cleanupTaskTemp, executeTask, type WorkerResult } from "./worker";
  */
 
 const PROGRESS_EMIT_INTERVAL_MS = 500;
-const SPEED_WINDOW_MS = 2000;
+const SPEED_WINDOW_MS = 2500;
+const SPEED_MIN_SPAN_MS = 500;
+/** 采样节流：多线程分片时 onBytes 触发频率很高，按 ~10Hz 采样即可 */
+const SPEED_SAMPLE_INTERVAL_MS = 100;
+const SPEED_MAX_SAMPLES = 1024;
+const SPEED_EMA_ALPHA = 0.5;
 const MAX_CONCURRENT_LIMIT = 5;
 const ACTIVE_STATUSES: ReadonlyArray<TaskStatus> = ["queued", "downloading", "merging"];
 
@@ -62,6 +67,7 @@ export class TaskManager {
   private readonly queue: string[] = [];
   private readonly lastEmitAt = new Map<string, number>();
   private readonly samples = new Map<string, ProgressSample[]>();
+  private readonly smoothedSpeed = new Map<string, number>();
   private initPromise: Promise<void> | null = null;
   private pumping = false;
   private pumpAgain = false;
@@ -154,6 +160,8 @@ export class TaskManager {
       finishedAt: null,
       sourceUrl: input.sourceUrl,
       audioOnly: input.audioOnly,
+      embedSubtitles: Boolean(input.embedSubtitles) && !input.audioOnly,
+      subtitleCount: 0,
     };
     this.tasks.set(task.id, task);
     this.queue.push(task.id);
@@ -254,6 +262,7 @@ export class TaskManager {
     this.tasks.delete(task.id);
     this.lastEmitAt.delete(task.id);
     this.samples.delete(task.id);
+    this.smoothedSpeed.delete(task.id);
     publishTaskEvent({ type: "task-deleted", id: task.id });
     this.persist();
     void this.removeTemp(task);
@@ -367,6 +376,7 @@ export class TaskManager {
     const entry: RunningEntry = { controller, pauseRequested: false, cancelRequested: false };
     this.running.set(task.id, entry);
     this.samples.set(task.id, []);
+    this.smoothedSpeed.delete(task.id);
     task.status = "downloading";
     task.startedAt = task.startedAt ?? Date.now();
     task.updatedAt = Date.now();
@@ -423,6 +433,7 @@ export class TaskManager {
         if (result.qn) current.qn = result.qn;
         if (result.qualityName) current.qualityName = result.qualityName;
         if (result.codec) current.codec = result.codec;
+        if (typeof result.subtitleCount === "number") current.subtitleCount = result.subtitleCount;
         current.error = result.error ?? null;
         if (current.totalBytes > 0) current.downloadedBytes = current.totalBytes;
       } else {
@@ -434,6 +445,7 @@ export class TaskManager {
       }
     } finally {
       this.samples.delete(task.id);
+      this.smoothedSpeed.delete(task.id);
       this.emitTask(current);
       this.persist();
       if (current.status === "cancelled" || current.status === "completed") {
@@ -473,19 +485,45 @@ export class TaskManager {
     }
   }
 
+  /**
+   * 速度估算：按 ~10Hz 采集最近 2.5s 的已下载字节，计算窗口内平均速度后再做指数平滑。
+   * 不能用「固定采样条数」截断（多线程分片时 100+ 次/秒的进度回调会把窗口挤到 <1s），
+   * 否则速度会长时间停在旧值或剧烈抖动；这里按时间窗口裁剪，并显式做 EMA。
+   */
   private updateSpeed(taskId: string, task: DownloadTask, downloaded: number): void {
     const now = Date.now();
-    const samples = this.samples.get(taskId) ?? [];
-    samples.push({ at: now, bytes: downloaded });
-    while (samples.length > 2 && samples[1].at < now - SPEED_WINDOW_MS) samples.shift();
-    this.samples.set(taskId, samples.slice(-32));
-    const first = samples[0];
-    const last = samples[samples.length - 1];
-    const elapsed = (last.at - first.at) / 1000;
-    if (elapsed >= 0.3) {
-      const speed = (last.bytes - first.bytes) / elapsed;
-      task.speed = Number.isFinite(speed) && speed > 0 ? Math.round(speed) : 0;
+    let samples = this.samples.get(taskId);
+    if (!samples) {
+      samples = [];
+      this.samples.set(taskId, samples);
     }
+    const last = samples[samples.length - 1];
+    if (!last) {
+      samples.push({ at: now, bytes: downloaded });
+    } else if (downloaded !== last.bytes) {
+      if (now - last.at >= SPEED_SAMPLE_INTERVAL_MS) {
+        samples.push({ at: now, bytes: downloaded });
+      } else {
+        // 同一采样间隔内合并为最新值，保证窗口覆盖真实时间跨度
+        last.at = now;
+        last.bytes = downloaded;
+      }
+    }
+    while (samples.length > 2 && samples[1].at < now - SPEED_WINDOW_MS) samples.shift();
+    if (samples.length > SPEED_MAX_SAMPLES) samples.splice(0, samples.length - SPEED_MAX_SAMPLES);
+
+    const first = samples[0];
+    const final = samples[samples.length - 1];
+    if (!first || !final || final.bytes <= first.bytes) return;
+    const elapsed = (final.at - first.at) / 1000;
+    if (elapsed * 1000 < SPEED_MIN_SPAN_MS) return;
+    const instant = (final.bytes - first.bytes) / elapsed;
+    if (!Number.isFinite(instant) || instant <= 0) return;
+    const previous = this.smoothedSpeed.get(taskId) ?? instant;
+    const smoothed = previous * (1 - SPEED_EMA_ALPHA) + instant * SPEED_EMA_ALPHA;
+    if (!Number.isFinite(smoothed) || smoothed <= 0) return;
+    this.smoothedSpeed.set(taskId, smoothed);
+    task.speed = Math.round(smoothed);
   }
 }
 

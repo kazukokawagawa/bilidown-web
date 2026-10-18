@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useIsDesktop } from "@/hooks/use-desktop";
+import { subscribeAccountChanged } from "@/lib/account-events";
 import { api } from "@/lib/api-client";
 import type { BiliUser } from "@/lib/types";
 
@@ -24,14 +25,19 @@ export function AppHeader() {
 
   useEffect(() => {
     let cancelled = false;
-    api.bili
-      .nav()
-      .then((nav) => {
-        if (!cancelled) setUser(nav.isLogin && nav.user ? nav.user : null);
-      })
-      .catch(() => undefined);
+    const loadUser = () => {
+      api.bili
+        .nav()
+        .then((nav) => {
+          if (!cancelled) setUser(nav.isLogin && nav.user ? nav.user : null);
+        })
+        .catch(() => undefined);
+    };
+    loadUser();
+    const unsubscribe = subscribeAccountChanged(loadUser);
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 

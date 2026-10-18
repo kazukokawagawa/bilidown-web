@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     const cover = optionalString(body, "cover", "", 2000) ?? "";
     const upName = optionalString(body, "upName", "", 200) ?? "";
     const audioOnly = optionalBoolean(body, "audioOnly", false);
+    const embedSubtitles = optionalBoolean(body, "embedSubtitles", settings.embedSubtitles);
     const sourceUrl =
       optionalString(body, "sourceUrl", "https://www.bilibili.com/video/" + bvid, 2000) ??
       "https://www.bilibili.com/video/" + bvid;
@@ -66,6 +67,7 @@ export async function POST(request: Request) {
       codec,
       audioOnly,
       sourceUrl,
+      embedSubtitles,
     };
     const task = await getTaskManager().create(input);
     return apiOk({ task }, 201);

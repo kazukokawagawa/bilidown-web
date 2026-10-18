@@ -17,6 +17,8 @@ export type SettingsFormState = Pick<
   | "autoCheckUpdate"
   | "saveTaskHistory"
   | "deleteTempAfterMerge"
+  | "downloadThreads"
+  | "embedSubtitles"
 >;
 
 export function toSettingsForm(settings: AppSettings | PublicSettings): SettingsFormState {
@@ -34,6 +36,8 @@ export function toSettingsForm(settings: AppSettings | PublicSettings): Settings
     autoCheckUpdate: settings.autoCheckUpdate,
     saveTaskHistory: settings.saveTaskHistory,
     deleteTempAfterMerge: settings.deleteTempAfterMerge,
+    downloadThreads: settings.downloadThreads,
+    embedSubtitles: settings.embedSubtitles,
   };
 }
 

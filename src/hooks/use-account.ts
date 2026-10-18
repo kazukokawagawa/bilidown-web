@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { notifyAccountChanged } from "@/lib/account-events";
 import { api, getErrorMessage } from "@/lib/api-client";
 import type { BiliUser } from "@/lib/types";
 
@@ -27,6 +28,7 @@ export function useAccount(): UseAccountResult {
       setLoggedIn(nav.isLogin);
       setUser(nav.isLogin && nav.user ? nav.user : null);
       setError(null);
+      notifyAccountChanged();
     } catch (cause) {
       if (!mountedRef.current) return;
       setError(getErrorMessage(cause));
@@ -66,6 +68,7 @@ export function useAccount(): UseAccountResult {
     if (!mountedRef.current) return;
     setUser(null);
     setLoggedIn(false);
+    notifyAccountChanged();
   }, []);
 
   return { user, loggedIn, loading, error, refresh, logout };
@@ -83,7 +86,8 @@ export interface UseQrLoginResult {
 }
 
 const QR_POLL_INTERVAL = 1000;
-const QR_TIMEOUT = 180000;
+const QR_TIMEOUT = 200000;
+const QR_POLL_MAX_RETRIES = 2;
 
 /** 打开扫码登录弹窗时生成二维码并每 1s 轮询，180s 超时。关闭弹窗（active=false）时自动停止。 */
 export function useQrLogin(active: boolean, onConfirmed: (user?: BiliUser) => void): UseQrLoginResult {
@@ -107,7 +111,7 @@ export function useQrLogin(active: boolean, onConfirmed: (user?: BiliUser) => vo
     let cancelled = false;
     let timer: number | null = null;
 
-    const poll = async (key: string, deadline: number): Promise<void> => {
+    const poll = async (key: string, deadline: number, failures = 0): Promise<void> => {
       if (cancelled) return;
       if (Date.now() > deadline) {
         setStatus("expired");
@@ -135,13 +139,20 @@ export function useQrLogin(active: boolean, onConfirmed: (user?: BiliUser) => vo
         setMessage(result.status === "scanned" ? "已扫码，请在手机上确认登录" : null);
       } catch (cause) {
         if (cancelled) return;
+        // 网络/接口偶发失败时先重试，避免一次抖动就中断登录轮询。
+        if (failures < QR_POLL_MAX_RETRIES && Date.now() < deadline) {
+          timer = window.setTimeout(() => {
+            void poll(key, deadline, failures + 1);
+          }, QR_POLL_INTERVAL * 2);
+          return;
+        }
         setStatus("error");
         setMessage(getErrorMessage(cause));
         return;
       }
 
       timer = window.setTimeout(() => {
-        void poll(key, deadline);
+        void poll(key, deadline, 0);
       }, QR_POLL_INTERVAL);
     };
 

@@ -168,6 +168,52 @@ export async function mergeDashToMp4(options: {
   );
 }
 
+export interface MkvSubtitleInput {
+  /** 本地 SRT 字幕文件路径 */
+  path: string;
+  /** ISO 639-2 语言码，如 chi / eng */
+  language: string;
+  /** 轨道标题（展示名） */
+  title: string;
+}
+
+/**
+ * 合并 DASH 音视频 + 内嵌 SRT 字幕为 MKV（docs/blueprint.md §4）。
+ * 命令要点：视频/音频流直接 copy，字幕转 srt 并写入 language/title，首条字幕设为默认轨。
+ */
+export async function mergeDashToMkv(options: {
+  ffmpegPath: string | null | undefined;
+  videoPath: string;
+  audioPath?: string | null;
+  subtitles: MkvSubtitleInput[];
+  outputPath: string;
+  signal?: AbortSignal;
+}): Promise<void> {
+  const command = resolveCommand(options.ffmpegPath);
+  const hasAudio = Boolean(options.audioPath);
+  // 输入顺序：video = 0，audio = 1（可选），字幕依次排在其后
+  const subtitleInputBase = hasAudio ? 2 : 1;
+  const args: string[] = ["-y", "-hide_banner", "-loglevel", "error", "-i", options.videoPath];
+  if (options.audioPath) args.push("-i", options.audioPath);
+  for (const subtitle of options.subtitles) args.push("-i", subtitle.path);
+
+  args.push("-map", "0:v:0");
+  if (hasAudio) args.push("-map", "1:a:0");
+  options.subtitles.forEach((_subtitle, index) => {
+    args.push("-map", `${subtitleInputBase + index}:s:0`);
+  });
+
+  args.push("-c", "copy", "-c:s", "srt");
+  options.subtitles.forEach((subtitle, index) => {
+    args.push("-metadata:s:s:" + index, "language=" + subtitle.language);
+    args.push("-metadata:s:s:" + index, "title=" + subtitle.title);
+  });
+  if (options.subtitles.length > 0) args.push("-disposition:s:0", "default");
+  args.push(options.outputPath);
+
+  await assertSuccess(command, args, options.signal);
+}
+
 /** 单轨封装（音频转 m4a / 无音轨视频转 mp4）。 */
 export async function remuxToContainer(options: {
   ffmpegPath: string | null | undefined;

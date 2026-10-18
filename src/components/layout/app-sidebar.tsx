@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CircleCheck, CircleX, DownloadCloud } from "lucide-react";
 import { NAV_ITEMS } from "@/components/layout/nav-items";
+import { subscribeAccountChanged } from "@/lib/account-events";
 import { api } from "@/lib/api-client";
 import type { BiliUser, SystemInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -21,20 +22,26 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   useEffect(() => {
     let cancelled = false;
+    const loadUser = () => {
+      api.bili
+        .nav()
+        .then((nav) => {
+          if (!cancelled) setUser(nav.isLogin && nav.user ? nav.user : null);
+        })
+        .catch(() => undefined);
+    };
+
     api.system
       .info()
       .then((info) => {
         if (!cancelled) setSystem(info);
       })
       .catch(() => undefined);
-    api.bili
-      .nav()
-      .then((nav) => {
-        if (!cancelled) setUser(nav.isLogin && nav.user ? nav.user : null);
-      })
-      .catch(() => undefined);
+    loadUser();
+    const unsubscribe = subscribeAccountChanged(loadUser);
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 

@@ -28,6 +28,12 @@ import type {
   VideoStat,
 } from "@/lib/types";
 
+import {
+  exchangeLoginTicket,
+  mergeLoginCookies,
+  parseCookieFromLoginUrl,
+  parseSetCookieHeaders,
+} from "./login-cookie";
 import { getMixinKey, getWbiKeys, signWbiParams } from "./wbi";
 
 /**
@@ -118,11 +124,25 @@ interface BiliEnvelope<T> {
   result?: T;
 }
 
-async function fetchBiliJson<T>(
+interface BiliFetchedJson<T> {
+  envelope: BiliEnvelope<T>;
+  /** 响应头 Set-Cookie 原文（登录相关接口需要，用于换取登录态）。 */
+  setCookies: string[];
+}
+
+/** 读取响应头中的全部 Set-Cookie（Node 18.14+ / undici 支持 getSetCookie）。 */
+function readSetCookieHeaders(headers: Headers): string[] {
+  const getter = (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+  if (typeof getter === "function") return getter.call(headers);
+  const raw = headers.get("set-cookie");
+  return raw ? [raw] : [];
+}
+
+async function fetchBiliJsonWithCookies<T>(
   url: string,
   cookie?: BiliCookie,
   options: { timeoutMs?: number } = {},
-): Promise<BiliEnvelope<T>> {
+): Promise<BiliFetchedJson<T>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS);
   try {
@@ -149,7 +169,10 @@ async function fetchBiliJson<T>(
       });
     }
     try {
-      return JSON.parse(text) as BiliEnvelope<T>;
+      return {
+        envelope: JSON.parse(text) as BiliEnvelope<T>,
+        setCookies: readSetCookieHeaders(response.headers),
+      };
     } catch {
       throw new BiliApiError("B站接口返回了非 JSON 数据（可能被风控拦截）", {
         status: 502,
@@ -159,6 +182,15 @@ async function fetchBiliJson<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchBiliJson<T>(
+  url: string,
+  cookie?: BiliCookie,
+  options: { timeoutMs?: number } = {},
+): Promise<BiliEnvelope<T>> {
+  const { envelope } = await fetchBiliJsonWithCookies<T>(url, cookie, options);
+  return envelope;
 }
 
 /* ---------------------------------------------------------------- 输入解析 */
@@ -905,33 +937,15 @@ export interface QrcodePollResult {
   message?: string;
 }
 
-/** 解析登录成功回调 URL 中的 cookie（SESSDATA / bili_jct / DedeUserID 等）。 */
-export function parseCookieFromLoginUrl(loginUrl: string | undefined): BiliCookie {
-  if (!loginUrl) return {};
-  try {
-    const url = new URL(loginUrl);
-    const cookie: BiliCookie = {};
-    const keys: ReadonlyArray<keyof BiliCookie> = [
-      "SESSDATA",
-      "bili_jct",
-      "DedeUserID",
-      "DedeUserID__ckMd5",
-      "sid",
-      "buvid3",
-    ];
-    for (const key of keys) {
-      const value = url.searchParams.get(key);
-      if (value) cookie[key] = value;
-    }
-    return cookie;
-  } catch {
-    return {};
-  }
-}
-
-/** 轮询二维码扫码状态（外层 code 表示接口状态，data.code 表示扫码状态）。 */
+/**
+ * 轮询二维码扫码状态（外层 code 表示接口状态，data.code 表示扫码状态）。
+ *
+ * 确认成功时：旧流程的 data.url 查询参数里直接带 SESSDATA 等 Cookie；新流程的 data.url
+ * 只带 ticket，需要再访问 crossDomain 地址，从 Set-Cookie 响应头换取真正的登录态。
+ * 这里同时捕获轮询响应自身的 Set-Cookie 与换票结果，避免手机端已确认但本地“拿不到登录态”。
+ */
 export async function pollQrcode(key: string): Promise<QrcodePollResult> {
-  const envelope = await fetchBiliJson<RawQrPollData>(
+  const { envelope, setCookies } = await fetchBiliJsonWithCookies<RawQrPollData>(
     BILI_API.qrPoll + "?qrcode_key=" + encodeURIComponent(key),
   );
   if (envelope.code !== 0 || !envelope.data) {
@@ -942,8 +956,21 @@ export async function pollQrcode(key: string): Promise<QrcodePollResult> {
   }
   const data = envelope.data;
   switch (data.code) {
-    case 0:
-      return { status: "confirmed", cookie: parseCookieFromLoginUrl(data.url), message: data.message };
+    case 0: {
+      let cookie = mergeLoginCookies(parseSetCookieHeaders(setCookies), parseCookieFromLoginUrl(data.url));
+      if (!cookie.SESSDATA && data.url) {
+        try {
+          const exchanged = await exchangeLoginTicket(data.url, {
+            headers: buildBiliHeaders(),
+            timeoutMs: REQUEST_TIMEOUT_MS,
+          });
+          cookie = mergeLoginCookies(cookie, exchanged);
+        } catch (error) {
+          console.warn("[bili] 登录票据换取 Cookie 失败:", errorMessage(error));
+        }
+      }
+      return { status: "confirmed", cookie, message: data.message };
+    }
     case 86101:
       return { status: "waiting", message: data.message };
     case 86090:

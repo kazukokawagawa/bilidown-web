@@ -54,6 +54,7 @@ export interface UseVideoResult {
   selectedCodec: Codec | null;
   selectedStream: StreamDetail | null;
   audioOnly: boolean;
+  embedSubtitles: boolean;
   parsing: boolean;
   streamsLoading: boolean;
   creating: boolean;
@@ -64,6 +65,7 @@ export interface UseVideoResult {
   selectQn: (qn: number) => void;
   selectCodec: (codec: Codec) => void;
   setAudioOnly: (value: boolean) => void;
+  setEmbedSubtitles: (value: boolean) => void;
   /** 为所有已勾选分P批量创建下载任务 */
   createDownloads: () => Promise<DownloadTask[]>;
 }
@@ -79,6 +81,7 @@ export function useVideo(): UseVideoResult {
   const [selectedCodec, setSelectedCodec] = useState<Codec | null>(null);
   const [selectedPages, setSelectedPages] = useState<VideoPage[]>([]);
   const [audioOnly, setAudioOnly] = useState(false);
+  const [embedSubtitles, setEmbedSubtitles] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [streamsLoading, setStreamsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -86,8 +89,12 @@ export function useVideo(): UseVideoResult {
   const inputRef = useRef("");
   const parseSeq = useRef(0);
   const streamsSeq = useRef(0);
-  /** 设置页的默认清晰度/编码，解析时作为取流初值 */
-  const defaultsRef = useRef<{ qn: number | null; codec: Codec | null }>({ qn: null, codec: null });
+  /** 设置页的默认清晰度/编码与内嵌字幕开关，解析时作为初值 */
+  const defaultsRef = useRef<{ qn: number | null; codec: Codec | null; embedSubtitles: boolean }>({
+    qn: null,
+    codec: null,
+    embedSubtitles: false,
+  });
 
   const setInput = useCallback((value: string) => {
     inputRef.current = value;
@@ -111,6 +118,7 @@ export function useVideo(): UseVideoResult {
         defaultsRef.current = {
           qn: response.settings.defaultQn ?? null,
           codec: response.settings.preferCodec ?? null,
+          embedSubtitles: response.settings.embedSubtitles ?? false,
         };
       })
       .catch(() => undefined);
@@ -174,6 +182,7 @@ export function useVideo(): UseVideoResult {
         setSelectedQn(null);
         setSelectedCodec(null);
         setAudioOnly(false);
+        setEmbedSubtitles(defaults.embedSubtitles);
         setParsing(false);
         if (firstPage) {
           void loadStreams(response.video.bvid, firstPage.cid, {
@@ -280,6 +289,7 @@ export function useVideo(): UseVideoResult {
             qn: selectedQn,
             codec: selectedCodec,
             audioOnly,
+            embedSubtitles: audioOnly ? false : embedSubtitles,
             sourceUrl: "https://www.bilibili.com/video/" + video.bvid + (page.page > 1 ? "?p=" + String(page.page) : ""),
           });
           created.push(response.task);
@@ -299,7 +309,7 @@ export function useVideo(): UseVideoResult {
       }
     }
     return created;
-  }, [video, selectedPages, selectedQn, selectedCodec, audioOnly]);
+  }, [video, selectedPages, selectedQn, selectedCodec, audioOnly, embedSubtitles]);
 
   const qualityChoices = useMemo(() => {
     const map = new Map<number, QualityOption>();
@@ -340,6 +350,7 @@ export function useVideo(): UseVideoResult {
     selectedCodec,
     selectedStream,
     audioOnly,
+    embedSubtitles,
     parsing,
     streamsLoading,
     creating,
@@ -350,6 +361,7 @@ export function useVideo(): UseVideoResult {
     selectQn,
     selectCodec,
     setAudioOnly,
+    setEmbedSubtitles,
     createDownloads,
   };
 }

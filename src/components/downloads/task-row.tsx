@@ -60,13 +60,27 @@ function etaSeconds(task: DownloadTask): number | null {
 function statusDetail(task: DownloadTask): string {
   switch (task.status) {
     case "queued":
-      return "等待开始下载";
-    case "downloading":
-      return formatSpeed(task.speed) + " · 剩余 " + formatEta(etaSeconds(task));
+      return "排队等待中…";
+    case "downloading": {
+      // 服务端速度已做 5s 窗口 + EMA 平滑，这里只负责展示；
+      // 速度为 0 时（刚开始/网络抖动）不拼接无意义的「0 B/s · 剩余 --」。
+      if (task.speed <= 0) {
+        return task.downloadedBytes > 0 ? "正在下载…" : "正在连接…";
+      }
+      const eta = etaSeconds(task);
+      if (eta === null) {
+        return formatSpeed(task.speed);
+      }
+      return formatSpeed(task.speed) + " · 剩余 " + formatEta(eta);
+    }
     case "merging":
-      return "正在合并音视频…";
+      return task.embedSubtitles && !task.audioOnly
+        ? "正在合并音视频与字幕…"
+        : "正在合并音视频…";
     case "completed":
-      return "已完成";
+      return task.subtitleCount > 0
+        ? "已完成 · 已内嵌 " + task.subtitleCount + " 条字幕"
+        : "已完成";
     case "paused":
       return "已暂停，可继续下载";
     case "error":
@@ -159,6 +173,13 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
                     仅音频
                   </Badge>
                 ) : null}
+                {task.embedSubtitles && !task.audioOnly ? (
+                  <Badge variant="secondary" className="font-normal">
+                    {task.status === "completed" && task.subtitleCount > 0
+                      ? "内嵌字幕 ×" + task.subtitleCount
+                      : "内嵌字幕"}
+                  </Badge>
+                ) : null}
               </div>
               <a
                 href={"https://www.bilibili.com/video/" + task.bvid}
@@ -178,7 +199,7 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
             <div className="flex flex-wrap items-center gap-1.5">
               {canPause ? (
                 <Button
-                  size="icon"
+                  size="icon-sm"
                   variant="outline"
                   title="暂停"
                   aria-label="暂停"
@@ -190,7 +211,7 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
               ) : null}
               {canResume ? (
                 <Button
-                  size="icon"
+                  size="icon-sm"
                   variant="outline"
                   title="继续"
                   aria-label="继续"
@@ -202,7 +223,7 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
               ) : null}
               {canCancel ? (
                 <Button
-                  size="icon"
+                  size="icon-sm"
                   variant="outline"
                   title="取消"
                   aria-label="取消"
@@ -214,7 +235,7 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
               ) : null}
               {canRetry ? (
                 <Button
-                  size="icon"
+                  size="icon-sm"
                   variant="outline"
                   title="重试"
                   aria-label="重试"
@@ -227,7 +248,7 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
               {canOpenFile ? (
                 <>
                   <Button
-                    size="icon"
+                    size="icon-sm"
                     variant="outline"
                     title="复制 BV 号"
                     aria-label="复制 BV 号"
@@ -235,7 +256,7 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
-                  <Button asChild size="icon" variant="outline" title="在浏览器打开视频">
+                  <Button asChild size="icon-sm" variant="outline" title="在浏览器打开视频">
                     <a
                       href={"https://www.bilibili.com/video/" + task.bvid}
                       target="_blank"
@@ -255,7 +276,7 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
               ) : null}
               {canOpenFile && task.filePath ? (
                 <Button
-                  size="icon"
+                  size="icon-sm"
                   variant="outline"
                   title="复制文件路径"
                   aria-label="复制文件路径"
@@ -267,7 +288,7 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
               <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
                 <AlertDialogTrigger asChild>
                   <Button
-                    size="icon"
+                    size="icon-sm"
                     variant="ghost"
                     title="删除任务"
                     aria-label="删除任务"
@@ -310,13 +331,20 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
                   {percent.toFixed(1)}%
                 </>
               ) : (
-                <>{formatBytes(totalSize)}</>
+                // 总大小未知时只展示已下载字节（无数据时退回文件大小），避免出现「0 B / 0 B」。
+                <>{formatBytes(task.downloadedBytes > 0 ? task.downloadedBytes : totalSize)}</>
               )}
             </span>
           </div>
 
           {task.status === "error" && task.error ? (
             <p className="rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive">{task.error}</p>
+          ) : null}
+          {task.status === "completed" && task.error ? (
+            // 已完成任务也可能带告警（如字幕内嵌失败），用琥珀色与失败状态区分。
+            <p className="rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+              {task.error}
+            </p>
           ) : null}
           {task.status === "completed" && task.fileName ? (
             <p className="truncate text-xs text-muted-foreground" title={task.fileName}>

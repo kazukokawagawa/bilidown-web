@@ -25,4 +25,17 @@ if (fs.existsSync(publicSource)) {
   fs.cpSync(publicSource, path.join(standalone, "public"), { recursive: true, force: true });
 }
 
-console.log("[prepare-standalone] 静态资源已复制到 .next/standalone");
+// Turbopack 遇到动态路径访问时会把整个项目 trace 进 standalone（构建警告可见），
+// 其中包含 release/downloads/data/screenshots 等运行期不需要的目录。这里清掉它们：
+// 1) 避免打包版体积膨胀（release 里的安装包会被二次打包）；
+// 2) 避免把本机下载文件、以及 data/settings.json 里的登录 Cookie 打进安装包。
+const pruneDirs = ["release", "downloads", "data", "screenshots", "docs"];
+const pruneFiles = ["start.log", "build.log", "lint.log", "electron-smoke.log", "tsconfig.tsbuildinfo"];
+for (const dir of pruneDirs) {
+  fs.rmSync(path.join(standalone, dir), { recursive: true, force: true });
+}
+for (const file of pruneFiles) {
+  fs.rmSync(path.join(standalone, file), { force: true });
+}
+
+console.log("[prepare-standalone] 静态资源已复制，无关目录已清理");

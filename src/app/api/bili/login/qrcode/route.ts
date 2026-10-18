@@ -1,5 +1,4 @@
-import { createRequire } from "node:module";
-import path from "node:path";
+import QRCode from "qrcode";
 
 import { generateQrcode } from "@/server/bili/client";
 import { apiOk, errorToResponse, HttpError } from "@/server/http";
@@ -7,40 +6,10 @@ import { apiOk, errorToResponse, HttpError } from "@/server/http";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-interface QrcodeModule {
-  toDataURL(
-    text: string,
-    options?: {
-      type?: "image/png";
-      errorCorrectionLevel?: "L" | "M" | "Q" | "H";
-      margin?: number;
-      width?: number;
-    },
-  ): Promise<string>;
-}
-
-let cachedModule: QrcodeModule | null | undefined;
-
-/** 动态加载 qrcode（依赖由项目安装；避免打包器在依赖尚未安装时静态解析失败）。 */
-function loadQrcodeModule(): QrcodeModule | null {
-  if (cachedModule !== undefined) return cachedModule;
+/** 渲染二维码 dataURL；依赖静态打包进服务端产物（桌面版 standalone 内同样可用）。 */
+async function renderQrcodeDataUrl(text: string): Promise<string> {
   try {
-    const requireFromProject = createRequire(path.join(process.cwd(), "package.json"));
-    const moduleName = "qr" + "code";
-    const loaded = requireFromProject(moduleName) as QrcodeModule;
-    cachedModule = loaded ?? null;
-  } catch (error) {
-    console.error("[qrcode] 无法加载 qrcode 依赖（DedeUserID 登录不可用）:", error);
-    cachedModule = null;
-  }
-  return cachedModule;
-}
-
-async function renderQrcodeDataUrl(text: string): Promise<string | null> {
-  const qrcode = loadQrcodeModule();
-  if (!qrcode) return null;
-  try {
-    return await qrcode.toDataURL(text, {
+    return await QRCode.toDataURL(text, {
       type: "image/png",
       errorCorrectionLevel: "M",
       margin: 1,
@@ -48,7 +17,7 @@ async function renderQrcodeDataUrl(text: string): Promise<string | null> {
     });
   } catch (error) {
     console.error("[qrcode] 生成二维码 dataURL 失败:", error);
-    return null;
+    throw new HttpError("二维码生成失败，请稍后重试", 500, "QRCODE_UNAVAILABLE");
   }
 }
 
@@ -57,13 +26,6 @@ export async function POST() {
   try {
     const { key, url } = await generateQrcode();
     const image = await renderQrcodeDataUrl(url);
-    if (!image) {
-      throw new HttpError(
-        "二维码生成组件不可用（服务端缺少 qrcode 依赖），请安装后重试",
-        500,
-        "QRCODE_UNAVAILABLE",
-      );
-    }
     return apiOk({ key, url, image });
   } catch (error) {
     return errorToResponse(error);

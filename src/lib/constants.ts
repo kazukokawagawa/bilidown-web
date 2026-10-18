@@ -71,7 +71,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoCheckUpdate: false,
   saveTaskHistory: true,
   deleteTempAfterMerge: true,
+  downloadThreads: 4,
+  embedSubtitles: false,
 };
+
+/** 单文件下载线程数可选值（1 = 单连接，>1 = 多连接分片下载）。 */
+export const DOWNLOAD_THREAD_OPTIONS = [1, 2, 4, 8] as const;
+
+export const MIN_DOWNLOAD_THREADS = 1;
+export const MAX_DOWNLOAD_THREADS = 8;
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   queued: "排队中",

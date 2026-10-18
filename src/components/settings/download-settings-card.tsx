@@ -16,7 +16,13 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useDesktopBridge, useIsDesktop } from "@/hooks/use-desktop";
-import { CODEC_NAMES, DEFAULT_QUALITIES, LOGIN_REQUIRED_QN, QUALITY_LABELS } from "@/lib/constants";
+import {
+  CODEC_NAMES,
+  DEFAULT_QUALITIES,
+  DOWNLOAD_THREAD_OPTIONS,
+  LOGIN_REQUIRED_QN,
+  QUALITY_LABELS,
+} from "@/lib/constants";
 import type { Codec, SystemInfo } from "@/lib/types";
 import { NAMING_PLACEHOLDERS, renderNamingTemplate } from "./naming-template";
 import type { SettingsFormState } from "./settings-form";
@@ -126,14 +132,16 @@ export function DownloadSettingsCard({ form, onChange, systemInfo, systemLoading
           </div>
           <div className="rounded-md bg-muted/50 px-3 py-2 text-xs">
             <span className="text-muted-foreground">文件名预览：</span>
-            <span className="break-all font-medium">{renderNamingTemplate(form.namingTemplate)}.mp4</span>
+            <span className="break-all font-medium">
+              {renderNamingTemplate(form.namingTemplate)}.{form.embedSubtitles ? "mkv" : "mp4"}
+            </span>
           </div>
           <p className="text-xs text-muted-foreground">
             可用占位符：{NAMING_PLACEHOLDERS.map((item) => item.key).join(" ")}；文件名中的非法字符会自动替换为下划线，长度限制 180 字符。
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="maxConcurrent">最大并发</Label>
             <Select
@@ -152,6 +160,28 @@ export function DownloadSettingsCard({ form, onChange, systemInfo, systemLoading
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">同时下载的任务数（1-5）</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="downloadThreads">单文件线程数</Label>
+            <Select
+              value={String(form.downloadThreads)}
+              onValueChange={(value) => onChange("downloadThreads", Number(value))}
+            >
+              <SelectTrigger id="downloadThreads" className="w-full">
+                <SelectValue placeholder="选择线程数" />
+              </SelectTrigger>
+              <SelectContent>
+                {DOWNLOAD_THREAD_OPTIONS.map((value) => (
+                  <SelectItem key={value} value={String(value)}>
+                    {value === 1 ? "1（单连接）" : String(value)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              单个音/视频文件的多连接下载线程数（1-8），1 为单连接
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -212,6 +242,27 @@ export function DownloadSettingsCard({ form, onChange, systemInfo, systemLoading
             id="mergeWithFfmpeg"
             checked={form.mergeWithFfmpeg}
             onCheckedChange={(checked) => onChange("mergeWithFfmpeg", checked)}
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="embedSubtitles" className="cursor-pointer">
+              内嵌字幕（输出 MKV）
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              下载时拉取 B 站 CC 字幕并封装为 MKV，需要 ffmpeg；未检测到 ffmpeg 或没有字幕时自动回退 MP4。
+            </p>
+            {systemInfo && !ffmpeg?.available ? (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                当前未检测到 ffmpeg，内嵌字幕不会生效，将回退为 MP4。
+              </p>
+            ) : null}
+          </div>
+          <Switch
+            id="embedSubtitles"
+            checked={form.embedSubtitles}
+            onCheckedChange={(checked) => onChange("embedSubtitles", checked)}
           />
         </div>
 

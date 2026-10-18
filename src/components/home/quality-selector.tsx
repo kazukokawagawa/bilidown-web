@@ -16,6 +16,8 @@ interface QualitySelectorProps {
   selectedQn: number | null;
   selectedCodec: Codec | null;
   audioOnly: boolean;
+  embedSubtitles: boolean;
+  ffmpegAvailable: boolean;
   isLogin: boolean;
   loading: boolean;
   disabled?: boolean;
@@ -23,6 +25,7 @@ interface QualitySelectorProps {
   onQnChange: (qn: number) => void;
   onCodecChange: (codec: Codec) => void;
   onAudioOnlyChange: (value: boolean) => void;
+  onEmbedSubtitlesChange: (value: boolean) => void;
 }
 
 export function QualitySelector({
@@ -31,6 +34,8 @@ export function QualitySelector({
   selectedQn,
   selectedCodec,
   audioOnly,
+  embedSubtitles,
+  ffmpegAvailable,
   isLogin,
   loading,
   disabled,
@@ -38,6 +43,7 @@ export function QualitySelector({
   onQnChange,
   onCodecChange,
   onAudioOnlyChange,
+  onEmbedSubtitlesChange,
 }: QualitySelectorProps) {
   const showSkeleton = loading && qualities.length === 0;
   const selectDisabled = disabled || loading || audioOnly;
@@ -117,6 +123,29 @@ export function QualitySelector({
           </div>
           <Switch id="audio-only" checked={audioOnly} onCheckedChange={onAudioOnlyChange} disabled={disabled || loading} />
         </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="embed-subtitles" className="text-sm font-medium">
+              内嵌字幕（MKV）
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              下载时拉取 B 站 CC 字幕并封装为 MKV，需要 ffmpeg；无字幕或未检测到 ffmpeg 时自动回退 MP4。
+            </p>
+          </div>
+          <Switch
+            id="embed-subtitles"
+            checked={embedSubtitles}
+            onCheckedChange={onEmbedSubtitlesChange}
+            disabled={disabled || loading || audioOnly || !ffmpegAvailable}
+          />
+        </div>
+
+        {!ffmpegAvailable ? (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            未检测到 ffmpeg，内嵌字幕不可用；开启该选项时将回退为 MP4。
+          </p>
+        ) : null}
 
         {audioOnly ? (
           <p className="text-xs text-muted-foreground">仅下载音频时忽略清晰度与编码设置，最终保存为 m4a。</p>

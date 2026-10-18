@@ -40,6 +40,8 @@ interface DownloadPanelProps {
   qn: number | null;
   codec: Codec | null;
   audioOnly: boolean;
+  embedSubtitles: boolean;
+  ffmpegAvailable: boolean;
   stream: StreamDetail | null;
   creating: boolean;
   disabled: boolean;
@@ -52,6 +54,8 @@ export function DownloadPanel({
   qn,
   codec,
   audioOnly,
+  embedSubtitles,
+  ffmpegAvailable,
   stream,
   creating,
   disabled,
@@ -66,7 +70,11 @@ export function DownloadPanel({
   const videoSize = stream?.video?.size ?? 0;
   const totalSize = audioOnly ? audioSize : audioSize + videoSize;
   const sizeText = totalSize > 0 ? formatBytes(totalSize) + (pages.length > 1 ? " / P" : "") : "未知";
-  const formatText = audioOnly ? "M4A 音频" : "MP4 视频";
+  const formatText = audioOnly
+    ? "M4A 音频"
+    : embedSubtitles && ffmpegAvailable
+      ? "MKV 视频（内嵌字幕）"
+      : "MP4 视频";
   const downloadLabel =
     pages.length > 1 ? "开始下载（" + String(pages.length) + " 个任务）" : "开始下载";
 
@@ -95,7 +103,7 @@ export function DownloadPanel({
 
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
           <DialogTrigger asChild>
-            <Button type="button" variant="outline" className="w-full" disabled={!previewPage}>
+            <Button type="button" variant="outline" className="w-full" size="lg" disabled={!previewPage}>
               <Play className="h-4 w-4" />
               在线预览{pages.length > 1 ? "（首个分P）" : ""}
             </Button>

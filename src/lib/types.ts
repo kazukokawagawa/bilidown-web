@@ -78,6 +78,18 @@ export interface StreamDetail {
   audioOnly: boolean;
 }
 
+/** B 站 CC 字幕轨道（由 /x/player/wbi/v2 返回）。 */
+export interface SubtitleTrack {
+  /** 语言标识，如 zh-CN / ai-zh / en-US */
+  lang: string;
+  /** 展示名，如「中文（自动生成）」 */
+  label: string;
+  /** 字幕 JSON 的绝对地址 */
+  url: string;
+  /** 是否为 AI 生成字幕 */
+  ai: boolean;
+}
+
 export interface BiliCookie {
   SESSDATA?: string;
   bili_jct?: string;
@@ -146,7 +158,8 @@ export interface DownloadTask {
   qn: number;
   qualityName: string;
   codec: Codec;
-  format: "mp4" | "m4a" | "m4s";
+  /** 最终文件容器；embedSubtitles 生效且找到字幕时为 mkv */
+  format: "mp4" | "m4a" | "m4s" | "mkv";
   status: TaskStatus;
   progress: number;
   downloadedBytes: number;
@@ -162,6 +175,10 @@ export interface DownloadTask {
   finishedAt: number | null;
   sourceUrl: string;
   audioOnly: boolean;
+  /** 是否请求把 B 站字幕内嵌进 MKV（最终以 subtitleCount 为准） */
+  embedSubtitles: boolean;
+  /** 实际内嵌的字幕轨道数（0 表示未内嵌） */
+  subtitleCount: number;
 }
 
 export interface CreateTaskInput {
@@ -177,6 +194,8 @@ export interface CreateTaskInput {
   codec: Codec;
   audioOnly: boolean;
   sourceUrl: string;
+  /** 可选：是否把字幕内嵌为 MKV，缺省使用设置项 embedSubtitles */
+  embedSubtitles?: boolean;
 }
 
 export type TaskAction = "pause" | "resume" | "cancel" | "retry" | "delete";
@@ -198,6 +217,10 @@ export interface AppSettings {
   autoCheckUpdate: boolean;
   saveTaskHistory: boolean;
   deleteTempAfterMerge: boolean;
+  /** 单个音/视频文件的下载线程数（1-8，1 表示单连接） */
+  downloadThreads: number;
+  /** 默认是否拉取字幕并内嵌为 MKV（需要 ffmpeg） */
+  embedSubtitles: boolean;
 }
 
 export type PublicSettings = Omit<AppSettings, "cookie"> & {

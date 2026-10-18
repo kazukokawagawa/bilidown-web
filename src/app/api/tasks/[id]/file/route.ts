@@ -19,6 +19,7 @@ function contentTypeFor(fileName: string): string {
   if (ext === ".mp4") return "video/mp4";
   if (ext === ".m4a") return "audio/mp4";
   if (ext === ".m4s") return "application/octet-stream";
+  if (ext === ".mkv") return "video/x-matroska";
   return "application/octet-stream";
 }
 
