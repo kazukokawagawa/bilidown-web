@@ -34,11 +34,13 @@ function buildSectionRows(sections: CollectionSection[]): SectionRows[] {
 }
 
 interface CollectionListProps {
-  /** 合集标题（用于说明文案与列表文件夹名提示） */
+  /** 合集/番剧标题（用于说明文案与列表文件夹名提示） */
   title: string;
   sections: CollectionSection[];
   /** 当前解析视频对应的剧集 id，命中时显示「当前」徽标 */
   currentEpisodeId: number | null;
+  /** ugc=UGC 合集；pgc=番剧 season（正片 + PV/预告等小节） */
+  source?: "ugc" | "pgc";
   selectedIds: number[];
   disabled?: boolean;
   onToggle: (id: number) => void;
@@ -49,11 +51,13 @@ export function CollectionList({
   title,
   sections,
   currentEpisodeId,
+  source,
   selectedIds,
   disabled,
   onToggle,
   onToggleAll,
 }: CollectionListProps) {
+  const isBangumi = source === "pgc";
   const sectionRows = buildSectionRows(sections);
   const total = sectionRows.reduce((count, section) => count + section.rows.length, 0);
   if (total === 0) return null;
@@ -73,12 +77,12 @@ export function CollectionList({
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-2 text-base">
               <ListVideo className="h-4 w-4" />
-              合集列表（{total}）
+              {isBangumi ? "剧集列表" : "合集列表"}（{total}）
             </CardTitle>
             <CardDescription>
               {title ? <span className="font-medium text-foreground">{title}</span> : null}
               {title ? " · " : ""}
-              可批量勾选，下载时按合集名建子文件夹。
+              可批量勾选，下载时按{isBangumi ? "番剧名" : "合集名"}建子文件夹。
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 text-sm">

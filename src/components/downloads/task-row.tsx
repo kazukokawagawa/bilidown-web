@@ -222,7 +222,7 @@ export function TaskRow({ task, busy, browserFfmpegAvailable, browserFfmpegBytes
                 ) : null}
               </div>
               <a
-                href={"https://www.bilibili.com/video/" + task.bvid}
+                href={task.sourceUrl || "https://www.bilibili.com/video/" + task.bvid}
                 target="_blank"
                 rel="noreferrer"
                 className="block truncate font-medium hover:underline"
@@ -305,7 +305,7 @@ export function TaskRow({ task, busy, browserFfmpegAvailable, browserFfmpegBytes
                   </Button>
                   <Button asChild size="icon-sm" variant="outline" title="在浏览器打开视频">
                     <a
-                      href={"https://www.bilibili.com/video/" + task.bvid}
+                      href={task.sourceUrl || "https://www.bilibili.com/video/" + task.bvid}
                       target="_blank"
                       rel="noreferrer"
                       aria-label="在浏览器打开视频"

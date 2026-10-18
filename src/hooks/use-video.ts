@@ -72,9 +72,9 @@ export interface UseVideoResult {
   codecChoices: Codec[];
   /** 已勾选的分P（按页码升序） */
   selectedPages: VideoPage[];
-  /** 已勾选的合集剧集（按合集 sections 展平顺序） */
+  /** 已勾选的合集/番剧剧集（按 sections 展平顺序） */
   selectedEpisodes: CollectionEpisode[];
-  /** 视频所属合集（ugc_season）；非合集为 null */
+  /** 视频所属合集（ugc_season）或番剧 season 剧集列表；都没有为 null */
   collection: VideoCollection | null;
   /** 分P + 合集剧集的总勾选数 */
   totalSelected: number;
@@ -250,7 +250,7 @@ export function useVideo(): UseVideoResult {
         let nextPages: VideoPage[] = [];
         let nextEpisodes: CollectionEpisode[] = [];
         if (collection && countEpisodes(collection) > 1) {
-          // 合集模式：默认只勾选当前剧集；分P选择清空（取流回退到当前视频第一个分P）。
+          // 合集/番剧剧集模式：默认只勾选当前剧集；分P选择清空（取流回退到当前视频第一个分P）。
           const episodes = flattenEpisodes(collection.sections);
           const current =
             episodes.find((episode) => episode.id === collection.currentEpisodeId) ?? episodes[0] ?? null;
@@ -450,7 +450,7 @@ export function useVideo(): UseVideoResult {
           listIndex: episodeIndexes.get(episode.id) ?? null,
           embedDanmaku: !audioOnly && embedDanmaku,
           saveDanmaku,
-          sourceUrl: "https://www.bilibili.com/video/" + episode.bvid,
+          sourceUrl: episode.sourceUrl ?? "https://www.bilibili.com/video/" + episode.bvid,
         },
       });
     }

@@ -142,6 +142,7 @@ export function HomeContent() {
                 title={collection.title}
                 sections={collection.sections}
                 currentEpisodeId={collection.currentEpisodeId}
+                source={collection.source}
                 selectedIds={selectedEpisodes.map((episode) => episode.id)}
                 disabled={parsing}
                 onToggle={toggleEpisode}

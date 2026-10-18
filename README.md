@@ -28,7 +28,11 @@
 |---|---|
 | ![工具](screenshots/tools.png) | ![账号](screenshots/account.png) |
 
-> 截图来自生产构建（`next start`）+ Edge headless 实拍，位于 `screenshots/`。
+| 番剧剧集列表（ep → 正片 + PV） | 批量全选 13 集 |
+|---|---|
+| ![番剧剧集列表](screenshots/bangumi-episodes.png) | ![番剧批量全选](screenshots/bangumi-episodes-selected.png) |
+
+> 截图来自 Next 构建页面 + Edge headless 实拍，位于 `screenshots/`。
 
 ## 快速开始
 
@@ -65,7 +69,7 @@ npm run electron:build
 
 | 路由 | 功能 |
 |---|---|
-| `/` 首页 | 解析任意输入（BV/av/链接/b23 短链/ep/ss）→ 展示视频信息、封面、UP主、统计、**分P列表与合集（ugc_season）剧集列表** → 勾选分P/合集批量下载、清晰度、编码（AVC/HEVC/AV1）、仅音频、**内嵌弹幕 / 单独保存弹幕文件** → 批量创建下载任务（列表下载按列表名建子文件夹）；官方 iframe 在线预览；最近任务 |
+| `/` 首页 | 解析任意输入（BV/av/链接/b23 短链/ep/ss）→ 展示视频信息、封面、UP主、统计、**分P列表、合集（ugc_season）与番剧 season 剧集列表（正片 + PV/预告等小节）** → 勾选分P/合集/剧集批量下载、清晰度、编码（AVC/HEVC/AV1）、仅音频、**内嵌弹幕 / 单独保存弹幕文件** → 批量创建下载任务（列表下载按列表名建子文件夹）；官方 iframe 在线预览；最近任务 |
 | `/search` 搜索 | **增强功能**（原桌面版没有关键词搜索接口）：B站关键词搜索（视频/UP主、排序、分页）；搜索不可用时可直接回首页粘贴链接 |
 | `/downloads` 下载 | 任务统计 + 状态 Tabs；实时进度（SSE）、速度、剩余时间；暂停/继续/取消/重试/删除；下载文件、复制路径；**列表名 / 内嵌弹幕 / 弹幕文件徽标与弹幕数量、弹幕文件夹路径**；**服务端无 ffmpeg 时的「浏览器合并」（ffmpeg.wasm，手机网页端可用）与音视频分片单独下载**；导出/导入 JSON、清理已完成、清空全部 |
 | `/account` 账号 | B站扫码登录（服务端保存 Cookie）、用户信息、退出登录；登录后可下载 1080P+ 等高清清晰度 |
@@ -105,6 +109,13 @@ downloads/
       ├─ P1 第1集.ass
       └─ P2 第2集.xml
 ```
+
+### 番剧（PGC season）剧集列表
+
+- 输入番剧 `ep` / `ss` 链接（或 b23.tv 短链、番剧视频 BV 号）时，除当前集信息外还会请求 `pgc/view/web/season`，把整季**正片剧集**与 **PV/预告等小节**映射为剧集列表（`collection.source = "pgc"`），首页显示「剧集列表（N）」。
+- 默认勾选当前集，显示「当前」徽标；支持单集/多集/全选/取消全选，批量创建任务时按番剧名建子文件夹（`<下载目录>/<番剧名>/P<序号> <第N话 标题>.mp4`），任务标题/命名取每集的 `show_title`。
+- 剧集卡片可跳转原始 `bangumi/play/epXXX` 链接；`view.redirect_url` 也会用于识别 BV 号输入对应的番剧，普通 UGC 视频/合集不受影响（合集仍显示「合集列表」）。
+- 清晰度/下载权限跟随当前 B 站账号（大会员、付费/地区限制与网页端一致）；番剧接口失败时自动降级为单集信息，不阻断解析。
 
 ### 无 ffmpeg 环境 / 手机网页端：浏览器内 ffmpeg.wasm 合并
 
@@ -190,7 +201,7 @@ bilidown-web/
 | electron-updater 自动更新安装 | 保留「检查更新」（读取更新源 latest.yml），不自动安装 |
 | 打开资源管理器 / 选择目录对话框 | 「复制路径」+ 浏览器下载文件；**桌面版支持原生目录选择与资源管理器定位** |
 | Plyr + mp4 直链预览 | 官方 `player.bilibili.com` iframe 预览（直链有 Referer 限制） |
-| 合集（ugc_season）勾选下载 | **已实现**：合集剧集多选/全选、批量建任务、按合集名建子文件夹 |
+| 合集（ugc_season）勾选下载 | **已实现**：合集剧集多选/全选、批量建任务、按合集名建子文件夹；番剧 PGC season（ep/ss）同样会展示剧集列表（正片 + PV/预告小节）并支持批量下载 |
 | 弹幕 XML/ASS、NFO 刮削、封面/字幕随视频下载 | **弹幕已支持**（内嵌为 MKV 的 ASS 软字幕轨道，和/或单独保存 XML+ASS 到「弹幕」子文件夹）；NFO 刮削、封面随视频下载仍未迁移 |
 | 导出 `.bilidownexport`（XOR 54 混淆） | 导出/导入普通 JSON；导入兼容原版 XOR 54 格式 |
 
@@ -225,6 +236,7 @@ bilidown-web/
 - 浏览器合并首次需下载约 31MB 引擎（`@ffmpeg/core`，单线程，无需 SharedArrayBuffer）；iOS Safari 建议 16+，个别浏览器对 blob 下载行为不同，可用任务行上的「再次保存 / 分享」重试。
 - 浏览器端「音频转 MP3」暂未迁移到 WASM：服务端没有 ffmpeg 时该工具不可用（手动混流已支持浏览器端）。
 - `@ffmpeg/core` 的许可证为 GPL-2.0-or-later（`@ffmpeg/ffmpeg` 为 MIT）；`public/ffmpeg` 是构建时从 `node_modules` 生成的产物、不纳入 git，但打包/再分发安装包时需遵守其许可证。
+- 番剧剧集列表来自 `pgc/view/web/season`：可下载清晰度与权限跟随当前登录账号（大会员/付费/地区限制与网页端一致）；PV/预告等小节会作为独立小节列出，批量全选时也会一并创建任务，可按需取消勾选。
 
 ## 验证记录（合集批量 / 列表文件夹 / 弹幕功能）
 
@@ -250,6 +262,15 @@ bilidown-web/
 - 生产 standalone（`node scripts/start-standalone.mjs --port 3200`，独立 data/downloads 目录）重复同样 E2E：移动视口合并下载成功，结果同上，无 console error。
 - 工具页「手动音视频混流」在服务端无 ffmpeg 时自动切换浏览器模式（网络面板无任何 `/api/tools` 请求）：mp4 容器支持时输出 MP4；用 Theora+Vorbis 构造不支持 MP4 的输入时自动回退输出 `video.mkv`（`ffprobe`: theora + vorbis，5.003s）。
 - 回归：测试后用户原设置（ffmpegPath/mergeWithFfmpeg/cookie）与任务列表已恢复原值；服务端 ffmpeg 合并/字幕弹幕内嵌代码路径未改动（worker 仅在“降级”分支新增分片路径字段），normalizeTask / importTasks 对缺失新字段的旧任务按 null 处理，旧数据/导入数据不会因新字段缺失而报错。
+
+## 验证记录（番剧剧集列表）
+
+- 接口映射（真实接口实测）：`GET /api/bili/video?input=<番剧链接>` 返回 `collection.source = "pgc"`、`title = 孤独摇滚！`、`currentEpisodeId = 693247`；`sections[0] = 正片`（12 集，首集 `第1话 孤独的转机`、时长 1415s、`sourceUrl = bangumi/play/ep693247`），`sections[1] = PV`（1 集，89s）。
+- 输入类型覆盖：番剧 `ep` 链接、`ss43164`、番剧视频 BV 号（通过 `view.redirect_url` 识别）、`b23.tv/ep693247` 短链 4 种输入均得到同一剧集列表；普通 UGC 合集（`BV1JD4y1U72G`）仍返回 4 个 section/95 集且 `source` 缺省（「合集列表」），普通单视频无列表。
+- 单集下载：番剧第 1 集创建任务（qn=16）下载完成；第 2 集任务（bvid/cid/aid 来自 PGC 映射）同样完成，落盘 `downloads/孤独摇滚！/P2 第2话 明天见.mp4`（`listTitle=孤独摇滚！`、`listIndex=2`），`sourceUrl` 为 bangumi ep 链接。
+- 手机视口（390×844，headless Edge）实测首页：显示「剧集列表（13）」「正片」「PV」「第1话 孤独的转机」「当前」与番剧名；点击全选后显示「已选 13 / 13」、下载按钮变为「开始下载（13 个任务）」；无 console error。
+- 回归：UGC 合集页面仍显示「合集列表（95）」；普通单视频不显示列表；任务行/B 站跳转优先使用 `task.sourceUrl`，番剧任务可直达 bangumi 播放页。
+- 静态检查：`npx tsc --noEmit`、`npx eslint .`、`npm run build` 通过（见下方最近一次构建）。
 
 ## 相关文档
 

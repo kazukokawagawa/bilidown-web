@@ -1,11 +1,11 @@
 import { getCookie } from "@/server/settings";
-import { getVideoInfo, resolveInput } from "@/server/bili/client";
+import { getPgcCollection, getVideoInfo, resolveInput } from "@/server/bili/client";
 import { apiOk, errorToResponse, HttpError, queryValue } from "@/server/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** GET /api/bili/video?input= — 解析输入并获取视频信息。 */
+/** GET /api/bili/video?input= — 解析输入并获取视频信息（番剧会附带 season 剧集列表）。 */
 export async function GET(request: Request) {
   try {
     const input = queryValue(request, "input");
@@ -16,6 +16,22 @@ export async function GET(request: Request) {
       throw new HttpError("无法从输入中解析出视频编号，请检查链接", 400, "INVALID_INPUT");
     }
     const video = await getVideoInfo({ bvid: parsed.bvid, aid: parsed.aid }, cookie);
+
+    // 番剧：把 PGC season 的剧集列表（正片 + PV/预告等小节）挂到 collection，
+    // 让首页可以像合集一样展示并批量下载。bv/av 输入用 view.redirect_url 兜底识别。
+    try {
+      const pgcCollection = await getPgcCollection(
+        { epId: parsed.epId, seasonId: parsed.seasonId, redirectUrl: video.redirectUrl },
+        cookie,
+      );
+      if (pgcCollection) video.collection = pgcCollection;
+    } catch (error) {
+      console.warn(
+        "[bili] 获取番剧剧集列表失败，降级为单集信息:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+
     return apiOk({ input: parsed, video });
   } catch (error) {
     return errorToResponse(error);

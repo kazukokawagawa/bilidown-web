@@ -45,10 +45,11 @@ function selectedPagesText(pages: VideoPage[]): string {
   return "已选 " + String(pages.length) + " 个分P：" + numbers + (pages.length > 4 ? " 等" : "");
 }
 
-/** 分P 与合集勾选合并展示；都没有勾选时提示先选择。 */
-function selectionText(pages: VideoPage[], selectedEpisodesCount: number): string {
+/** 分P 与合集/剧集勾选合并展示；都没有勾选时提示先选择。 */
+function selectionText(pages: VideoPage[], selectedEpisodesCount: number, episodeLabel: string): string {
   const pageText = pages.length > 0 ? selectedPagesText(pages) : null;
-  const episodeText = selectedEpisodesCount > 0 ? "合集已选 " + String(selectedEpisodesCount) + " 集" : null;
+  const episodeText =
+    selectedEpisodesCount > 0 ? episodeLabel + "已选 " + String(selectedEpisodesCount) + " 集" : null;
   if (pageText && episodeText) return pageText + " · " + episodeText;
   return pageText ?? episodeText ?? "未选择分P/合集";
 }
@@ -64,6 +65,12 @@ interface VideoCardProps {
 export function VideoCard({ video, parsed, selectedPages, selectedEpisodesCount = 0 }: VideoCardProps) {
   const title = stripHtml(video.title);
   const desc = stripHtml(video.desc);
+  const isBangumi = video.collection?.source === "pgc";
+  // 番剧优先跳转 bangumi 播放页（ep 链接 > view.redirect_url > 普通视频页）
+  const externalUrl =
+    parsed?.type === "ep" && parsed.epId
+      ? "https://www.bilibili.com/bangumi/play/ep" + String(parsed.epId)
+      : video.redirectUrl || "https://www.bilibili.com/video/" + video.bvid;
 
   return (
     <Card className="overflow-hidden">
@@ -128,14 +135,10 @@ export function VideoCard({ video, parsed, selectedPages, selectedEpisodesCount 
 
           <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
             <span className="max-w-full truncate text-xs text-muted-foreground">
-              {selectionText(selectedPages, selectedEpisodesCount)}
+              {selectionText(selectedPages, selectedEpisodesCount, isBangumi ? "剧集" : "合集")}
             </span>
             <Button variant="link" size="sm" asChild className="h-auto px-0 text-xs">
-              <a
-                href={"https://www.bilibili.com/video/" + video.bvid}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href={externalUrl} target="_blank" rel="noopener noreferrer">
                 在 B 站打开
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>

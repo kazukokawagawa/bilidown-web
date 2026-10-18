@@ -39,9 +39,9 @@ export interface VideoPage {
   duration: number;
 }
 
-/** 合集（ugc_season）中的一集 */
+/** 合集（ugc_season）/番剧 season 中的一集 */
 export interface CollectionEpisode {
-  /** 合集剧集 id（ugc_season.sections[].episodes[].id） */
+  /** 合集剧集 id（ugc_season.sections[].episodes[].id）；番剧为 ep_id */
   id: number;
   aid: number;
   bvid: string;
@@ -52,6 +52,8 @@ export interface CollectionEpisode {
   duration: number;
   cover: string;
   pubdate: number;
+  /** 该集在 B 站的原始链接（番剧为 bangumi/play/epXXX；UGC 合集可能缺省） */
+  sourceUrl?: string;
 }
 
 export interface CollectionSection {
@@ -60,14 +62,16 @@ export interface CollectionSection {
   episodes: CollectionEpisode[];
 }
 
-/** B站视频所属合集（ugc_season）；非合集视频为 null */
+/** 视频所属合集（ugc_season）或番剧 season；非合集/非番剧视频为 null */
 export interface VideoCollection {
   id: number;
-  /** 合集总标题，下载时作为列表文件夹名 */
+  /** 合集总标题 / 番剧名，下载时作为列表文件夹名 */
   title: string;
   sections: CollectionSection[];
   /** 当前解析视频对应的剧集 id（用于默认勾选） */
   currentEpisodeId: number | null;
+  /** 来源：UGC 合集（缺省）或 PGC 番剧 season（正片 + PV/预告等小节；sections[0] 为正片） */
+  source?: "ugc" | "pgc";
 }
 
 export interface VideoInfo {
@@ -82,7 +86,9 @@ export interface VideoInfo {
   stat: VideoStat;
   pages: VideoPage[];
   videos: number;
-  /** 视频所属合集（ugc_season）；非合集视频为 null */
+  /** view 接口的 redirect_url（番剧视频通常指向 bangumi/play/epXXX；普通视频为空） */
+  redirectUrl?: string;
+  /** 视频所属合集（ugc_season）或番剧 season 剧集；非合集/非番剧为 null */
   collection: VideoCollection | null;
 }
 

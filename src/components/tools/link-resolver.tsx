@@ -183,7 +183,7 @@ export function LinkResolver() {
                     ) : null}
                     <Button asChild size="sm" variant="outline">
                       <a
-                        href={"https://www.bilibili.com/video/" + result.video.bvid}
+                        href={result.video.redirectUrl || "https://www.bilibili.com/video/" + result.video.bvid}
                         target="_blank"
                         rel="noreferrer"
                       >

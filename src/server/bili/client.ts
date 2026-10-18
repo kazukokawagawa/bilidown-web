@@ -291,14 +291,28 @@ interface RawPgcEpisode {
   aid?: number;
   bvid?: string;
   cid?: number;
-  title?: string;
+  title?: number | string;
   long_title?: string;
+  show_title?: string;
+  cover?: string;
+  duration?: number;
+  pub_time?: number;
+  link?: string;
+}
+
+interface RawPgcSection {
+  id?: number;
+  title?: string;
+  type?: number;
+  episodes?: RawPgcEpisode[] | null;
 }
 
 interface RawPgcData {
   season_id?: number;
   title?: string;
+  season_title?: string;
   episodes?: RawPgcEpisode[];
+  section?: RawPgcSection[] | null;
 }
 
 async function fetchPgcSeason(
@@ -329,19 +343,135 @@ export async function resolvePgcVideo(
     throw new BiliApiError("缺少 ep / ss 编号", { status: 400, code: "INVALID_INPUT" });
   }
   const season = await fetchPgcSeason({ seasonId: parsed.seasonId, epId: parsed.epId }, cookie);
-  const episodes = season.episodes ?? [];
-  if (!episodes.length) {
+  const mainEpisodes = season.episodes ?? [];
+  if (!mainEpisodes.length) {
     throw new BiliApiError("该番剧没有可用的剧集", { status: 404, code: "PGC_NOT_FOUND" });
   }
-  let episode = episodes[0];
+  let episode = mainEpisodes[0];
   if (parsed.epId) {
-    const found = episodes.find((item) => item.ep_id === parsed.epId || item.id === parsed.epId);
+    // 正片与 PV/预告等小节都算有效剧集，避免粘贴 PV ep 链接时错误回退到第 1 集
+    const extraEpisodes = (season.section ?? []).flatMap((section) => section.episodes ?? []);
+    const found = [...mainEpisodes, ...extraEpisodes].find(
+      (item) => item.ep_id === parsed.epId || item.id === parsed.epId,
+    );
     if (found) episode = found;
   }
   if (!episode.bvid) {
     throw new BiliApiError("无法解析番剧对应的视频", { status: 404, code: "PGC_NOT_FOUND" });
   }
   return { bvid: episode.bvid, aid: episode.aid ?? 0 };
+}
+
+/* ---------------------------------------------------------- 番剧剧集列表 */
+
+/** 从番剧 ep 链接/redirect_url 中提取 ep / ss 编号。 */
+function parsePgcIdsFromUrl(url: string): { epId?: number; seasonId?: number } {
+  const epMatch = EP_PATTERN.exec(url);
+  if (epMatch) {
+    const epId = Number.parseInt(epMatch[1], 10);
+    if (Number.isFinite(epId) && epId > 0) return { epId };
+  }
+  const ssMatch = SS_PATTERN.exec(url);
+  if (ssMatch) {
+    const seasonId = Number.parseInt(ssMatch[1], 10);
+    if (Number.isFinite(seasonId) && seasonId > 0) return { seasonId };
+  }
+  return {};
+}
+
+/** 把 PGC 单集映射为前端 CollectionEpisode（番剧每集是独立 bvid，page 恒为 1）。 */
+function mapPgcEpisode(raw: RawPgcEpisode): CollectionEpisode | null {
+  const bvid = strOr(raw.bvid, "");
+  const cid = numOr(raw.cid, 0);
+  const epId = numOr(raw.ep_id, numOr(raw.id, 0));
+  if (!bvid || cid <= 0 || epId <= 0) return null;
+  const rawTitle = typeof raw.title === "number" ? String(raw.title) : strOr(raw.title, "");
+  const title =
+    strOr(raw.show_title, "").trim() ||
+    [rawTitle, strOr(raw.long_title, "")].filter(Boolean).join(" ").trim() ||
+    bvid;
+  // PGC 接口 duration 单位是毫秒；收藏/时长展示统一用秒
+  const duration = Math.max(0, Math.round(numOr(raw.duration, 0) / 1000));
+  return {
+    id: epId,
+    aid: numOr(raw.aid, 0),
+    bvid,
+    cid,
+    page: 1,
+    title,
+    duration,
+    cover: normalizeImageUrl(strOr(raw.cover, "")),
+    pubdate: numOr(raw.pub_time, 0),
+    sourceUrl: strOr(raw.link, "") || "https://www.bilibili.com/bangumi/play/ep" + String(epId),
+  };
+}
+
+/** 把 PGC season 映射为 VideoCollection：sections[0] 为正片，其余为 PV/预告等小节。 */
+function mapPgcCollection(
+  season: RawPgcData,
+  currentEpId: number | null,
+): VideoCollection | null {
+  const mainEpisodes: CollectionEpisode[] = [];
+  for (const raw of season.episodes ?? []) {
+    const episode = mapPgcEpisode(raw);
+    if (episode) mainEpisodes.push(episode);
+  }
+  if (!mainEpisodes.length) return null;
+
+  const sections: CollectionSection[] = [
+    {
+      id: numOr(season.season_id, 0),
+      title: "正片",
+      episodes: mainEpisodes,
+    },
+  ];
+  for (const rawSection of season.section ?? []) {
+    const episodes: CollectionEpisode[] = [];
+    for (const raw of rawSection.episodes ?? []) {
+      const episode = mapPgcEpisode(raw);
+      if (episode) episodes.push(episode);
+    }
+    if (!episodes.length) continue;
+    sections.push({
+      id: numOr(rawSection.id, 0),
+      title: strOr(rawSection.title, "其他"),
+      episodes,
+    });
+  }
+
+  // 当前集：优先用调用方给的 epId，其次匹配不到时取正片第一集
+  const allEpisodes = sections.flatMap((section) => section.episodes);
+  const currentEpisodeId =
+    currentEpId !== null && allEpisodes.some((episode) => episode.id === currentEpId)
+      ? currentEpId
+      : mainEpisodes[0].id;
+
+  return {
+    id: numOr(season.season_id, 0),
+    title: strOr(season.title, strOr(season.season_title, "番剧")),
+    sections,
+    currentEpisodeId,
+    source: "pgc",
+  };
+}
+
+/**
+ * 获取番剧（PGC season）的剧集列表。
+ * - ep/ss 输入：直接用 epId / seasonId；
+ * - BV/av/普通链接输入：用 view 返回的 redirect_url（番剧视频会指向 bangumi/play/epXXX）兜底；
+ * 非番剧或接口失败时返回 null（调用方降级为单集信息）。
+ */
+export async function getPgcCollection(
+  params: { epId?: number; seasonId?: number; redirectUrl?: string },
+  cookie?: BiliCookie,
+): Promise<VideoCollection | null> {
+  const fromUrl = params.redirectUrl ? parsePgcIdsFromUrl(params.redirectUrl) : {};
+  const epId = params.epId ?? fromUrl.epId;
+  const seasonId = params.seasonId ?? fromUrl.seasonId;
+  if (!epId && !seasonId) return null;
+  const season = await fetchPgcSeason({ epId, seasonId }, cookie);
+  if (!season.episodes?.length) return null;
+  return mapPgcCollection(season, epId ?? null);
 }
 
 /** 解析任意输入：短链跟随跳转、ep/ss 解析到具体 bvid。 */
@@ -400,6 +530,7 @@ interface RawViewData {
   duration?: number;
   pubdate?: number;
   videos?: number;
+  redirect_url?: string;
   owner?: { mid?: number; name?: string; face?: string };
   stat?: Record<string, number | undefined>;
   pages?: Array<{ cid?: number; page?: number; part?: string; title?: string; duration?: number }>;
@@ -501,6 +632,7 @@ export async function getVideoInfo(id: VideoId, cookie?: BiliCookie): Promise<Vi
     stat,
     pages: pages.length ? pages : [{ cid: 0, page: 1, title: "P1", duration: numOr(data.duration, 0) }],
     videos: numOr(data.videos, pages.length || 1),
+    redirectUrl: strOr(data.redirect_url, ""),
     collection: mapVideoCollection(data.ugc_season, {
       bvid,
       cid: numOr(data.cid, pages[0]?.cid ?? 0),
