@@ -8,7 +8,7 @@
 
 | 层 | 技术 |
 |---|---|
-| 前端 | Next.js 16 App Router · React 19 · TypeScript strict · Tailwind CSS v4 · shadcn/ui（radix）· lucide-react · sonner |
+| 前端 | Next.js 16 App Router · React 19 · TypeScript strict · Tailwind CSS v4 · shadcn/ui（radix）· lucide-react · sonner · **ffmpeg.wasm**（服务端没有 ffmpeg 时在浏览器内无损合并音视频） |
 | 服务端（替代原 Electron 主进程） | Next.js Route Handlers（Node runtime）· B站 API 代理（UA/Referer/Cookie）· 服务端下载引擎（fetch 流式下载 DASH）· ffmpeg 合并 · JSON 持久化 · SSE 进度推送 |
 | 桌面壳（Electron） | Electron 44 · 内嵌 Next standalone 服务 · preload + contextBridge 白名单 IPC · 托盘 / 通知 / 目录选择 / 资源管理器 / `bilidown://` 协议 / 自动关机 |
 | 数据存储 | `data/tasks.json`（任务）、`data/settings.json`（设置含登录 Cookie）；桌面版存放在用户数据目录 |
@@ -32,7 +32,7 @@
 
 ## 快速开始
 
-要求：Node.js ≥ 20、npm；建议安装 **ffmpeg**（在 PATH 中）用于合并 DASH 音视频（未安装时会降级为分别保存音视频文件）。
+要求：Node.js ≥ 20、npm；**ffmpeg 是可选项**——装了就用服务端 ffmpeg 合并；没装时服务端会分别保存音视频分片，可在下载页点「浏览器合并」，用浏览器（含手机网页端）里的 ffmpeg.wasm 无损合成 MP4，无需在服务器安装 ffmpeg。
 
 ```powershell
 cd bilidown-web
@@ -67,7 +67,7 @@ npm run electron:build
 |---|---|
 | `/` 首页 | 解析任意输入（BV/av/链接/b23 短链/ep/ss）→ 展示视频信息、封面、UP主、统计、**分P列表与合集（ugc_season）剧集列表** → 勾选分P/合集批量下载、清晰度、编码（AVC/HEVC/AV1）、仅音频、**内嵌弹幕 / 单独保存弹幕文件** → 批量创建下载任务（列表下载按列表名建子文件夹）；官方 iframe 在线预览；最近任务 |
 | `/search` 搜索 | **增强功能**（原桌面版没有关键词搜索接口）：B站关键词搜索（视频/UP主、排序、分页）；搜索不可用时可直接回首页粘贴链接 |
-| `/downloads` 下载 | 任务统计 + 状态 Tabs；实时进度（SSE）、速度、剩余时间；暂停/继续/取消/重试/删除；下载文件、复制路径；**列表名 / 内嵌弹幕 / 弹幕文件徽标与弹幕数量、弹幕文件夹路径**；导出/导入 JSON、清理已完成、清空全部 |
+| `/downloads` 下载 | 任务统计 + 状态 Tabs；实时进度（SSE）、速度、剩余时间；暂停/继续/取消/重试/删除；下载文件、复制路径；**列表名 / 内嵌弹幕 / 弹幕文件徽标与弹幕数量、弹幕文件夹路径**；**服务端无 ffmpeg 时的「浏览器合并」（ffmpeg.wasm，手机网页端可用）与音视频分片单独下载**；导出/导入 JSON、清理已完成、清空全部 |
 | `/account` 账号 | B站扫码登录（服务端保存 Cookie）、用户信息、退出登录；登录后可下载 1080P+ 等高清清晰度 |
 | `/settings` 设置 | 下载目录、命名模板、最大并发、默认清晰度、优先编码、ffmpeg 检测、合并开关、字幕内嵌、**列表单独文件夹、弹幕内嵌、单独保存弹幕、弹幕字号/不透明度**、主题（浅色/深色/跟随系统）、剪贴板监听、自动检查更新、代理、清空记录/恢复默认 |
 | `/tools` 工具 | 链接解析、BV ⇄ AV 互转、CC 字幕 JSON → SRT、SRT → 纯文本、封面提取、音频转 MP3、音视频手动混流、正则测试 |
@@ -81,6 +81,7 @@ npm run electron:build
    - 流式下载 video/audio 到 `downloads/.tmp/<taskId>/`，支持 backupUrl 切换、Range 续传、暂停/取消
    - 需要时拉取 B 站 CC 字幕（SRT）与弹幕 XML，弹幕转 ASS；`ffmpeg` 合并音视频并把字幕/弹幕封装为 MKV 软字幕轨道（无 ffmpeg 时回退 MP4/M4A）
    - `ffmpeg -y -i video.m4s -i audio.m4s -c copy -movflags +faststart <name>.mp4` 合并（仅音频则直接保存 .m4a）
+   - 服务端没有 ffmpeg（或设置里关闭了合并）时，任务输出 `<name>.video.m4s` + `<name>.audio.m4s`（`format=m4s`）；下载页任务行提供「浏览器合并」：从 `/api/tasks/[id]/file?part=video|audio` 取回分片，在浏览器内用 ffmpeg.wasm `-c copy` 合成 MP4（容器不支持时自动回退 MKV）并直接保存到设备
    - 按命名模板落盘；列表（合集/多P）任务按列表名建子文件夹；勾选「单独保存弹幕文件」时把 XML/ASS 写入同目录的 `弹幕/` 子文件夹
    - 更新任务状态与 `data/tasks.json`
 4. 进度通过 `GET /api/tasks/events`（SSE）实时推送到前端；完成后可 `GET /api/tasks/[id]/file` 下载（支持 Range）。
@@ -105,9 +106,26 @@ downloads/
       └─ P2 第2集.xml
 ```
 
+### 无 ffmpeg 环境 / 手机网页端：浏览器内 ffmpeg.wasm 合并
+
+服务端没有安装 ffmpeg（例如手机访问的轻量部署、未装 ffmpeg 的容器/NAS）时，下载任务会分别保存音视频分片；此时不需要折腾服务器环境，直接在浏览器侧完成最后一步：
+
+- 下载页任务行出现「浏览器合并」按钮：点击后从服务端取回 `video.m4s` / `audio.m4s`，在 Web Worker 里用 `ffmpeg.wasm`（单线程 core）执行 `-c copy` 无损封装；成功即触发浏览器下载（手机端保存到“文件/下载”，也可用「再次保存 / 分享」走系统分享面板）。
+- 首次使用会下载约 31MB 合并引擎，之后走浏览器缓存（`/ffmpeg/*` 设置了 1 天缓存）；手机建议 Wi-Fi 下首次使用。
+- 资源来自本仓库同源的 `public/ffmpeg/`，不依赖外部 CDN、不需要 COOP/COEP 跨源隔离头；构建前由 `scripts/prepare-ffmpeg-wasm.mjs`（`postinstall` / `predev` / `prebuild` 自动执行）从 `node_modules/@ffmpeg/*` 复制。
+- 工具页「手动音视频混流」在服务端无 ffmpeg 时自动切换为浏览器内处理，文件不上传、不经过服务端。
+- 合并只做封装（不重编码），音轨编码无法放进 MP4 时（如部分 MKV 音轨）自动回退 `.mkv`。
+
+```text
+服务端（无 ffmpeg）                       浏览器（手机 / 电脑）
+video.m4s + audio.m4s  ── HTTP ──▶  ffmpeg.wasm (-c copy)  ──▶  <name>.mp4 保存到设备
+```
+
 ## 桌面版（Electron）能力
 
 桌面版用同一套 Next 代码运行在本机内嵌服务上（`.next/standalone`），由 Electron 主进程通过 preload 白名单暴露本地能力；浏览器访问时这些能力自动隐藏并优雅降级。
+
+> 浏览器端 ffmpeg.wasm 资源（约 31MB）会被复制进 `.next/standalone` 并随桌面版打包，便携版 exe 体积会相应增加；桌面版同样可在服务端无 ffmpeg 时使用「浏览器合并」。
 
 | 能力 | 说明 | IPC |
 |---|---|---|
@@ -135,6 +153,8 @@ bilidown-web/
 │  ├─ preload.cjs           # contextBridge 白名单注入 window.bilidownDesktop
 │  └─ assets/logo.ico
 ├─ scripts/prepare-standalone.mjs   # 把 .next/static、public 复制进 standalone 供打包
+├─ scripts/prepare-ffmpeg-wasm.mjs # 从 node_modules 复制浏览器端 ffmpeg.wasm 资源到 public/ffmpeg
+├─ public/ffmpeg/                 # 构建时生成：浏览器端 ffmpeg.wasm 封装 + core（不纳入 git）
 ├─ data/                    # 运行时生成：tasks.json / settings.json
 ├─ downloads/               # 默认下载目录（可配置）
 ├─ src/
@@ -143,8 +163,8 @@ bilidown-web/
 │  │  ├─ page.tsx               # 首页
 │  │  ├─ search/ account/ downloads/ settings/ tools/
 │  │  └─ api/                   # B站代理、任务、设置、系统、工具等 Route Handlers
-│  ├─ server/                   # 服务端：bili 客户端/WBI、下载引擎、ffmpeg、存储、SSE、设置
-│  ├─ lib/                      # 类型契约、常量、API client、格式化
+│  ├─ server/                   # 服务端：bili 客户端/WBI、下载引擎、ffmpeg、浏览器 ffmpeg 资源检测、存储、SSE、设置
+│  ├─ lib/                      # 类型契约、常量、API client、格式化、browser-ffmpeg.ts（浏览器合并）
 │  ├─ hooks/                    # use-video/use-search/use-tasks/use-settings/use-account
 │  └─ components/               # ui(shadcn) / layout / shared / home / search / downloads / account / settings / tools
 ```
@@ -152,7 +172,7 @@ bilidown-web/
 ## API 一览
 
 - B站：`/api/bili/video`、`/api/bili/streams`、`/api/bili/search`、`/api/bili/suggest`、`/api/bili/nav`、`/api/bili/login/qrcode`、`/api/bili/login/poll`、`/api/bili/logout`、`/api/bili/resolve`
-- 任务：`/api/tasks`（GET/POST/DELETE）、`/api/tasks/[id]/action`、`/api/tasks/[id]/file`、`/api/tasks/[id]/reveal`、`/api/tasks/events`（SSE）、`/api/tasks/export`、`/api/tasks/import`
+- 任务：`/api/tasks`（GET/POST/DELETE）、`/api/tasks/[id]/action`、`/api/tasks/[id]/file`（`?part=video|audio` 单独下载未合并的音视频分片，支持 Range）、`/api/tasks/[id]/reveal`、`/api/tasks/events`（SSE）、`/api/tasks/export`、`/api/tasks/import`
 - 设置/系统：`/api/settings`（GET/PUT）、`/api/system/info`、`/api/update/check`
 - 工具：`/api/tools/audio-to-mp3`、`/api/tools/mux`（multipart 上传，服务端 ffmpeg 处理）
 
@@ -161,6 +181,7 @@ bilidown-web/
 | 原功能（Electron） | Web 版实现 |
 |---|---|
 | aria2c 外部下载引擎 + JSON-RPC 轮询 | 服务端内置下载引擎（fetch 流式 + Range 续传 + ffmpeg 合并），不再依赖 aria2c |
+| 未安装 ffmpeg | 服务端分别保存音视频分片（`format=m4s`）；下载页/工具页可改用浏览器端 ffmpeg.wasm（单线程，无需服务器 ffmpeg），首次约加载 31MB 引擎 |
 | Dexie/IndexedDB 任务库 | 服务端 `data/tasks.json` + SSE 推送（多标签页共享） |
 | localStorage 设置 | 服务端 `data/settings.json`（自动保存） |
 | 二维码登录 + document.cookie | 服务端代理 passport 接口，Cookie 保存在服务端设置（不暴露给浏览器） |
@@ -200,6 +221,10 @@ bilidown-web/
 - 弹幕来自 B 站公开的 XML 接口，仅返回近期/常用弹幕（实测热门视频 1200~7200 条不等，接口限制），不是全量历史弹幕；接口风控失败时下载会跳过弹幕并给出提示。
 - 「内嵌弹幕」是封装为 MKV 的 ASS 软字幕轨道（可用播放器字幕菜单开关，不重新编码视频），不是把弹幕烧录进画面；需要播放器支持 ASS 字幕（VLC / PotPlayer / mpv 等）。
 - 桌面版使用系统原生窗口边框（原版为无边框自绘标题栏），以换取稳定的缩放/最大化行为。
+- 浏览器端 ffmpeg.wasm 为单线程实现：合并速度取决于设备性能；合并时需把分片读入内存（约 2~3 倍文件大小的内存峰值），超大文件在手机浏览器可能失败（>500MB 会先提示），失败不会影响已下载好的分片文件。
+- 浏览器合并首次需下载约 31MB 引擎（`@ffmpeg/core`，单线程，无需 SharedArrayBuffer）；iOS Safari 建议 16+，个别浏览器对 blob 下载行为不同，可用任务行上的「再次保存 / 分享」重试。
+- 浏览器端「音频转 MP3」暂未迁移到 WASM：服务端没有 ffmpeg 时该工具不可用（手动混流已支持浏览器端）。
+- `@ffmpeg/core` 的许可证为 GPL-2.0-or-later（`@ffmpeg/ffmpeg` 为 MIT）；`public/ffmpeg` 是构建时从 `node_modules` 生成的产物、不纳入 git，但打包/再分发安装包时需遵守其许可证。
 
 ## 验证记录（合集批量 / 列表文件夹 / 弹幕功能）
 
@@ -214,6 +239,17 @@ bilidown-web/
 - UI：无头 Edge（真实接口 + CDP 交互）验证首页渲染「合集列表（95）」、当前集徽标、全选与两个弹幕开关；设置页渲染新设置项；下载页渲染「列表 · xxx」「内嵌弹幕 ×N」「弹幕文件」「弹幕：路径」且无 console error。
 - 生产模式：重建后 `node scripts/start-standalone.mjs --port 3100` 与开发模式 `next dev:3000` 均 `/`、`/settings`、`/downloads` HTTP 200；`GET /api/tasks/[id]/file` 支持 Range（206，`bytes 0-15/74819875`）。
 - 独立验收：另起验收角色做代码审阅 + 独立 E2E + 弹幕模块单元测试（42/42）通过，结论 PASS。
+
+## 验证记录（浏览器端 ffmpeg.wasm 合并）
+
+- 静态检查：`npx tsc --noEmit` 通过、`npx eslint .` 0 errors 0 warnings、`npm run build`（Next 16 + Turbopack）通过，standalone 产物包含 `public/ffmpeg`（`ffmpeg-core.wasm` 32,232,419 字节）。
+- 资源服务：`GET /ffmpeg/classes.js|worker.js|ffmpeg-core.js` 200 `application/javascript`、`/ffmpeg/ffmpeg-core.wasm` 200 `application/wasm`，均带 `Cache-Control: public, max-age=86400`（生产 standalone 实测）。
+- 降级任务（把 ffmpegPath 指向不存在路径模拟无 ffmpeg）：360P 视频任务完成，`format=m4s`，落盘 `*.video.m4s`（9,292,223 B）与 `*.audio.m4s`（5,408,198 B）；`GET /api/tasks/[id]/file?part=video|audio` 均 200 且 Content-Length 正确，`part=audio` 的 Range 请求返回 206（`bytes 0-15/5408198`），非法 part 返回 400。
+- 手机视口（390×844，headless Edge）实测下载页：首次点击弹出「浏览器内合并」确认（说明 30.7MB 引擎），确认后自动加载引擎 → 读取 9.3MB 视频 + 5.4MB 音频 → 合并 → **浏览器自动下载** `【官方 MV】Never Gonna Give You Up - Rick Astley.mp4`（14,767,126 B），无 console error；桌面视口同样通过。
+- 合并结果 `ffprobe`：`h264` 视频 + `aac` 音频，时长 212.309s、容器 `mov,mp4`（与源视频一致，未重编码）。
+- 生产 standalone（`node scripts/start-standalone.mjs --port 3200`，独立 data/downloads 目录）重复同样 E2E：移动视口合并下载成功，结果同上，无 console error。
+- 工具页「手动音视频混流」在服务端无 ffmpeg 时自动切换浏览器模式（网络面板无任何 `/api/tools` 请求）：mp4 容器支持时输出 MP4；用 Theora+Vorbis 构造不支持 MP4 的输入时自动回退输出 `video.mkv`（`ffprobe`: theora + vorbis，5.003s）。
+- 回归：测试后用户原设置（ffmpegPath/mergeWithFfmpeg/cookie）与任务列表已恢复原值；服务端 ffmpeg 合并/字幕弹幕内嵌代码路径未改动（worker 仅在“降级”分支新增分片路径字段），normalizeTask / importTasks 对缺失新字段的旧任务按 null 处理，旧数据/导入数据不会因新字段缺失而报错。
 
 ## 相关文档
 

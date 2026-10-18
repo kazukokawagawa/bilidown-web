@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   Copy,
   ExternalLink,
+  FileAudio,
   FileDown,
   Film,
   FolderOpen,
@@ -35,10 +36,15 @@ import { getDesktopBridge } from "@/lib/desktop";
 import { CODEC_NAMES } from "@/lib/constants";
 import { formatBytes, formatEta, formatSpeed } from "@/lib/format";
 import type { DownloadTask, TaskAction } from "@/lib/types";
+import { BrowserMergeButton } from "./browser-merge-button";
 
 interface TaskRowProps {
   task: DownloadTask;
   busy: boolean;
+  /** /api/system/info：浏览器端 ffmpeg.wasm 资源是否就绪 */
+  browserFfmpegAvailable: boolean;
+  /** 浏览器端 ffmpeg 引擎 wasm 字节数（首次使用提示） */
+  browserFfmpegBytes: number | null;
   onAction: (id: string, action: TaskAction) => void;
 }
 
@@ -103,7 +109,7 @@ function statusDetail(task: DownloadTask): string {
   }
 }
 
-export function TaskRow({ task, busy, onAction }: TaskRowProps) {
+export function TaskRow({ task, busy, browserFfmpegAvailable, browserFfmpegBytes, onAction }: TaskRowProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const percent = taskPercent(task);
   const canPause = task.status === "queued" || task.status === "downloading";
@@ -116,6 +122,10 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
   const canRetry = task.status === "error" || task.status === "cancelled";
   const canOpenFile = task.status === "completed";
   const totalSize = task.totalBytes > 0 ? task.totalBytes : task.fileSize ?? 0;
+  // 服务端未合并（format=m4s）时才能单独取回音视频分片 / 在浏览器内合并
+  const isSplitTask = task.format === "m4s" && !task.audioOnly;
+  const hasAudioPart =
+    isSplitTask && (Boolean(task.audioFilePath) || Boolean(task.fileName && !task.fileName.startsWith("无声-")));
 
   async function handleReveal() {
     try {
@@ -277,6 +287,13 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
               ) : null}
               {canOpenFile ? (
                 <>
+                  {isSplitTask ? (
+                    <BrowserMergeButton
+                      task={task}
+                      available={browserFfmpegAvailable}
+                      coreBytes={browserFfmpegBytes}
+                    />
+                  ) : null}
                   <Button
                     size="icon-sm"
                     variant="outline"
@@ -296,12 +313,20 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
                       <ExternalLink className="h-4 w-4" />
                     </a>
                   </Button>
-                  <Button asChild size="sm" variant="outline" title="下载文件">
+                  <Button asChild size="sm" variant="outline" title={isSplitTask ? "下载视频分片" : "下载文件"}>
                     <a href={api.tasks.fileUrl(task.id)}>
                       <FileDown className="h-4 w-4" />
-                      <span className="hidden sm:inline">下载文件</span>
+                      <span className="hidden sm:inline">{isSplitTask ? "下载视频" : "下载文件"}</span>
                     </a>
                   </Button>
+                  {hasAudioPart ? (
+                    <Button asChild size="sm" variant="outline" title="下载音频分片">
+                      <a href={api.tasks.partFileUrl(task.id, "audio")}>
+                        <FileAudio className="h-4 w-4" />
+                        <span className="hidden sm:inline">下载音频</span>
+                      </a>
+                    </Button>
+                  ) : null}
                 </>
               ) : null}
               {canOpenFile && task.filePath ? (

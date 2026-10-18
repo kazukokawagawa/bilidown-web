@@ -70,6 +70,25 @@ export function SystemInfoCard({ info, loading, error, onReload, reloading }: Sy
               }
             />
             {info.ffmpeg.path ? <InfoRow label="ffmpeg 路径" value={info.ffmpeg.path} /> : null}
+            <InfoRow
+              label="浏览器合并"
+              value={
+                info.browserFfmpeg.available ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <CircleCheck className="h-4 w-4 text-emerald-500" />
+                    ffmpeg.wasm{info.browserFfmpeg.version ? " " + info.browserFfmpeg.version : ""}
+                    {info.browserFfmpeg.coreBytes
+                      ? "（约 " + Math.round(info.browserFfmpeg.coreBytes / 1024 / 1024) + "MB）"
+                      : ""}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <CircleX className="h-4 w-4 text-red-500" />
+                    资源未就绪（运行 npm run build / dev 生成）
+                  </span>
+                )
+              }
+            />
             <InfoRow label="下载目录" value={info.downloadDir} />
             <InfoRow
               label="目录可写"

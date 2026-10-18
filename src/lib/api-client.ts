@@ -105,6 +105,8 @@ export const api = {
       request<{ imported: number }>("/api/tasks/import", { method: "POST", body: JSON.stringify(payload) }),
     exportUrl: "/api/tasks/export",
     fileUrl: (id: string) => "/api/tasks/" + encodeURIComponent(id) + "/file",
+    partFileUrl: (id: string, part: "video" | "audio") =>
+      "/api/tasks/" + encodeURIComponent(id) + "/file" + qs({ part }),
     reveal: (id: string) =>
       request<{ path: string }>("/api/tasks/" + encodeURIComponent(id) + "/reveal", { method: "POST" }),
     eventsUrl: "/api/tasks/events",

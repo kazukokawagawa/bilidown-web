@@ -245,7 +245,7 @@ export function DownloadSettingsCard({ form, onChange, systemInfo, systemLoading
             </p>
             {systemInfo && !ffmpeg?.available ? (
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                当前未检测到 ffmpeg，开启合并可能失败，将自动降级为分别保存。
+                当前未检测到 ffmpeg，开启合并会降级为分别保存音视频分片；可在下载页对已完成任务使用「浏览器合并」（浏览器端 ffmpeg.wasm）。
               </p>
             ) : null}
           </div>

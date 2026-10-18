@@ -73,7 +73,8 @@ export function ToolsView() {
       </Tabs>
 
       <p className="mt-6 rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
-        音视频工具由服务端 ffmpeg 完成，上传与转码时间取决于文件大小，请耐心等待；大文件建议直接使用下载页面。
+        音视频工具优先由服务端 ffmpeg 完成；服务端未安装 ffmpeg 时，手动混流会自动改用浏览器端
+        ffmpeg.wasm（文件不上传、在手机/电脑本地完成，首次需加载约 31MB 引擎）。大文件建议直接使用下载页面。
       </p>
     </div>
   );

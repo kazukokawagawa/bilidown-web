@@ -153,6 +153,8 @@ export class TaskManager {
       filePath: null,
       fileName: null,
       fileSize: null,
+      videoFilePath: null,
+      audioFilePath: null,
       error: null,
       createdAt: now,
       updatedAt: now,
@@ -232,6 +234,8 @@ export class TaskManager {
       task.filePath = null;
       task.fileName = null;
       task.fileSize = null;
+      task.videoFilePath = null;
+      task.audioFilePath = null;
       // 等待清理完成，避免与随后启动的 worker 竞争临时目录
       await this.removeTemp(task);
     }
@@ -328,6 +332,8 @@ export class TaskManager {
         filePath: null,
         fileName: null,
         fileSize: null,
+        videoFilePath: null,
+        audioFilePath: null,
         error: null,
         startedAt: null,
         finishedAt: null,
@@ -441,6 +447,8 @@ export class TaskManager {
         current.filePath = result.filePath ?? null;
         current.fileName = result.fileName ?? null;
         current.fileSize = result.fileSize ?? null;
+        current.videoFilePath = result.videoFilePath ?? null;
+        current.audioFilePath = result.audioFilePath ?? null;
         current.format = result.format ?? current.format;
         if (result.qn) current.qn = result.qn;
         if (result.qualityName) current.qualityName = result.qualityName;

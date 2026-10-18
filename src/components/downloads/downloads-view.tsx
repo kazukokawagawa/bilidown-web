@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { DownloadCloud, FolderOpen, RefreshCw } from "lucide-react";
+import { AlertTriangle, DownloadCloud, FolderOpen, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ListSkeleton } from "@/components/shared/loading";
@@ -71,6 +71,13 @@ export function DownloadsView() {
       paused: tasks.filter((task) => task.status === "paused").length,
     };
   }, [tasks]);
+
+  const browserFfmpegAvailable = systemInfo ? systemInfo.browserFfmpeg.available : false;
+  const serverFfmpegAvailable = systemInfo ? systemInfo.ffmpeg.available : true;
+  const mergeDisabled = settings ? !settings.mergeWithFfmpeg : false;
+  // 服务端无法合并时会保存音视频分片，提示用户可在浏览器内合并（尤其是手机网页端）
+  const showBrowserMergeHint = Boolean(systemInfo) && (!serverFfmpegAvailable || mergeDisabled);
+  const splitTaskCount = tasks.filter((task) => task.format === "m4s").length;
 
   const filtered = useMemo(
     () => tasks.filter((task) => matchesTab(task.status, tab)),
@@ -145,6 +152,25 @@ export function DownloadsView() {
         failed={counts.failed}
       />
 
+      {showBrowserMergeHint ? (
+        <div className="mt-4 flex gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="min-w-0 space-y-1">
+            <p className="font-medium">
+              {serverFfmpegAvailable
+                ? "已在设置中关闭服务端 ffmpeg 合并：任务会分别保存音视频分片"
+                : "服务端未检测到 ffmpeg：任务会分别保存音视频分片"}
+              {splitTaskCount > 0 ? "（当前 " + splitTaskCount + " 个）" : ""}
+            </p>
+            <p className="text-xs">
+              {browserFfmpegAvailable
+                ? "已完成的任务可点「浏览器合并」，直接用手机/电脑浏览器内的 ffmpeg.wasm 无损合成 MP4；首次使用需加载约 31MB 引擎，之后走浏览器缓存。"
+                : "浏览器合并资源未就绪：请重新运行 npm run dev / npm run build 生成 public/ffmpeg 静态资源后再使用。"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {error ? (
         <div className="mt-4 flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between">
           <span>任务列表加载失败：{error}</span>
@@ -202,6 +228,8 @@ export function DownloadsView() {
                 key={task.id}
                 task={task}
                 busy={busyId === task.id}
+                browserFfmpegAvailable={browserFfmpegAvailable}
+                browserFfmpegBytes={systemInfo ? systemInfo.browserFfmpeg.coreBytes : null}
                 onAction={(id, action) => void handleAction(id, action)}
               />
             ))}

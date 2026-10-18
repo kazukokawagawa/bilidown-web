@@ -3,11 +3,20 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 
+import type { DownloadTask } from "@/lib/types";
 import { getTaskManager } from "@/server/download/manager";
 import { apiError, contentDisposition, errorToResponse, HttpError } from "@/server/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/**
+ * GET /api/tasks/[id]/file — 下载已完成文件（支持 Range）。
+ * 通过 ?part=video|audio 可取服务端未合并时（format=m4s）单独保存的音视频分片；
+ * 不传 part 时保持旧行为（下载任务主文件：合并结果或视频分片）。
+ */
+
+type PartKind = "video" | "audio";
 
 interface ByteRange {
   start: number;
@@ -52,17 +61,45 @@ function parseByteRange(header: string, fileSize: number): ByteRange | "invalid"
   return { start, end };
 }
 
-/** GET /api/tasks/[id]/file — 下载已完成文件（支持 Range）。 */
+/** 旧任务的音频分片路径可由视频分片文件名推导（<base>.video.m4s -> <base>.audio.m4s）。 */
+function deriveAudioPath(videoFilePath: string): string | null {
+  if (!/\.video\.m4s$/i.test(videoFilePath)) return null;
+  return videoFilePath.replace(/\.video\.m4s$/i, ".audio.m4s");
+}
+
+function resolvePart(task: DownloadTask, part: PartKind): { filePath: string; fileName: string } {
+  if (part === "video") {
+    const filePath = task.videoFilePath ?? (task.format === "m4s" ? task.filePath : null);
+    if (!filePath) throw new HttpError("该任务没有可单独下载的视频分片", 404, "TASK_PART_NOT_AVAILABLE");
+    return { filePath, fileName: path.basename(filePath) };
+  }
+
+  const filePath = task.audioFilePath ?? (task.filePath ? deriveAudioPath(task.filePath) : null);
+  if (!filePath) throw new HttpError("该任务没有可单独下载的音频分片", 404, "TASK_PART_NOT_AVAILABLE");
+  return { filePath, fileName: path.basename(filePath) };
+}
+
+function resolveFile(task: DownloadTask, part: PartKind | null): { filePath: string; fileName: string } {
+  if (part) return resolvePart(task, part);
+  if (!task.filePath || !task.fileName) throw new HttpError("任务尚未生成文件", 404, "TASK_FILE_NOT_READY");
+  return { filePath: task.filePath, fileName: task.fileName };
+}
+
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const task = await getTaskManager().get(id);
     if (!task) throw new HttpError("任务不存在或已被删除", 404, "TASK_NOT_FOUND");
-    if (!task.filePath || !task.fileName) throw new HttpError("任务尚未生成文件", 404, "TASK_FILE_NOT_READY");
+
+    const partParam = new URL(request.url).searchParams.get("part");
+    if (partParam !== null && partParam !== "video" && partParam !== "audio") {
+      throw new HttpError("part 必须是 video / audio 之一", 400, "INVALID_PART");
+    }
+    const resolved = resolveFile(task, partParam as PartKind | null);
 
     let fileSize: number;
     try {
-      const stat = await fs.stat(task.filePath);
+      const stat = await fs.stat(resolved.filePath);
       if (!stat.isFile()) throw new Error("不是文件");
       fileSize = stat.size;
     } catch {
@@ -70,8 +107,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     }
 
     const headers: Record<string, string> = {
-      "Content-Type": contentTypeFor(task.fileName),
-      "Content-Disposition": contentDisposition(task.fileName),
+      "Content-Type": contentTypeFor(resolved.fileName),
+      "Content-Disposition": contentDisposition(resolved.fileName),
       "Accept-Ranges": "bytes",
       "Cache-Control": "no-store",
     };
@@ -85,7 +122,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       const chunkSize = range.end - range.start + 1;
       headers["Content-Range"] = "bytes " + range.start + "-" + range.end + "/" + fileSize;
       headers["Content-Length"] = String(chunkSize);
-      const stream = createReadStream(task.filePath, { start: range.start, end: range.end });
+      const stream = createReadStream(resolved.filePath, { start: range.start, end: range.end });
       return new Response(Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>, {
         status: 206,
         headers,
@@ -93,7 +130,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     }
 
     headers["Content-Length"] = String(fileSize);
-    const stream = createReadStream(task.filePath);
+    const stream = createReadStream(resolved.filePath);
     return new Response(Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>, {
       status: 200,
       headers,

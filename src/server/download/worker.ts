@@ -47,6 +47,10 @@ export interface WorkerResult {
   filePath?: string | null;
   fileName?: string | null;
   fileSize?: number | null;
+  /** 服务端未合并时保存的视频分片路径（format=m4s） */
+  videoFilePath?: string | null;
+  /** 服务端未合并且含音轨时保存的音频分片路径（format=m4s） */
+  audioFilePath?: string | null;
   format?: DownloadTask["format"];
   qn?: number;
   qualityName?: string;
@@ -932,9 +936,11 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
   const videoOutput = await reserveOutputPath(degradedPlan.dir, baseName + ".video.m4s");
   await moveFile(videoTmp, videoOutput.filePath);
   let totalSize = await fileSize(videoOutput.filePath);
+  let audioOutputPath: string | null = null;
   if (hasAudio) {
     const audioOutput = await reserveOutputPath(degradedPlan.dir, baseName + ".audio.m4s");
     await moveFile(audioTmp, audioOutput.filePath);
+    audioOutputPath = audioOutput.filePath;
     totalSize += await fileSize(audioOutput.filePath);
   }
   // 降级时视频文件名为 <name>.video.m4s；弹幕文件改用原始 <name> 作为 basename，避免出现 <name>.video.xml
@@ -952,6 +958,8 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
     filePath: videoOutput.filePath,
     fileName: videoOutput.fileName,
     fileSize: totalSize,
+    videoFilePath: videoOutput.filePath,
+    audioFilePath: audioOutputPath,
     format: "m4s",
     qn: selected.qn,
     qualityName: selected.label,

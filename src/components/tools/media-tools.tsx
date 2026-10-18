@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSystemInfo } from "@/hooks/use-settings";
+import { mergeVideoAudioInBrowser } from "@/lib/browser-ffmpeg";
+import { downloadBlob, fileBaseName } from "@/lib/download";
 import { formatBytes } from "@/lib/format";
 
 const MAX_AUDIO_SIZE = 200 * 1024 * 1024;
@@ -37,22 +40,6 @@ function fileNameFromDisposition(header: string | null, fallback: string): strin
   return match ? match[1] : fallback;
 }
 
-function baseName(fileName: string): string {
-  const index = fileName.lastIndexOf(".");
-  return index > 0 ? fileName.slice(0, index) : fileName;
-}
-
-function downloadBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 async function upload(
   url: string,
   formData: FormData,
@@ -68,7 +55,7 @@ async function upload(
   };
 }
 
-function AudioToMp3Card() {
+function AudioToMp3Card({ serverFfmpegAvailable }: { serverFfmpegAvailable: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -102,7 +89,7 @@ function AudioToMp3Card() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const data = await upload("/api/tools/audio-to-mp3", formData, baseName(file.name) + ".mp3");
+      const data = await upload("/api/tools/audio-to-mp3", formData, fileBaseName(file.name) + ".mp3");
       setResult(data);
       toast.success("音频已转换为 MP3");
     } catch (cause) {
@@ -121,7 +108,11 @@ function AudioToMp3Card() {
           <Music className="h-4 w-4" />
           音频转 MP3
         </CardTitle>
-        <CardDescription>上传音频文件，由服务端 ffmpeg 转为 MP3（上限 200MB）</CardDescription>
+        <CardDescription>
+          {serverFfmpegAvailable
+            ? "上传音频文件，由服务端 ffmpeg 转为 MP3（上限 200MB）"
+            : "服务端未检测到 ffmpeg：音频转 MP3 暂不可用（可先下载分片用其他工具处理）"}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <input
@@ -132,7 +123,7 @@ function AudioToMp3Card() {
           onChange={handleFileChange}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" disabled={busy} onClick={() => inputRef.current?.click()}>
+          <Button variant="outline" disabled={busy || !serverFfmpegAvailable} onClick={() => inputRef.current?.click()}>
             <Upload className="h-4 w-4" />
             选择音频文件
           </Button>
@@ -140,7 +131,7 @@ function AudioToMp3Card() {
             {file ? file.name + "（" + formatBytes(file.size) + "）" : "支持 aac / m4a / m4s / mp3 / flac"}
           </span>
         </div>
-        <Button disabled={busy || !file} onClick={() => void handleConvert()}>
+        <Button disabled={busy || !file || !serverFfmpegAvailable} onClick={() => void handleConvert()}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Music className="h-4 w-4" />}
           {busy ? "正在转换…" : "开始转换"}
         </Button>
@@ -167,7 +158,13 @@ function AudioToMp3Card() {
   );
 }
 
-function MuxCard() {
+function MuxCard({
+  serverFfmpegAvailable,
+  browserFfmpegAvailable,
+}: {
+  serverFfmpegAvailable: boolean;
+  browserFfmpegAvailable: boolean;
+}) {
   const audioRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -175,6 +172,10 @@ function MuxCard() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progressText, setProgressText] = useState<string | null>(null);
+  // 服务端没有 ffmpeg 时自动改用浏览器端 ffmpeg.wasm（文件不上传，手机端也可用）
+  const browserMode = !serverFfmpegAvailable && browserFfmpegAvailable;
+  const unavailable = !serverFfmpegAvailable && !browserFfmpegAvailable;
 
   function pickFile(kind: "audio" | "video") {
     return (event: ChangeEvent<HTMLInputElement>) => {
@@ -184,7 +185,7 @@ function MuxCard() {
       setResult(null);
       setError(null);
       if (picked.size > MAX_MUX_SIZE) {
-        const message = "文件大于 500MB，请压缩或分段后再上传";
+        const message = "文件大于 500MB，请压缩或分段后再处理";
         setError(message);
         toast.error(message);
         return;
@@ -202,11 +203,23 @@ function MuxCard() {
     setBusy(true);
     setError(null);
     setResult(null);
+    setProgressText(null);
     try {
+      if (browserMode) {
+        const data = await mergeVideoAudioInBrowser({
+          video: videoFile,
+          audio: audioFile,
+          fileName: fileBaseName(videoFile.name) + ".mp4",
+          onProgress: (progress) => setProgressText(progress.label),
+        });
+        setResult({ blob: data.blob, fileName: data.fileName });
+        toast.success("已在浏览器内完成封装（文件未上传）");
+        return;
+      }
       const formData = new FormData();
       formData.append("audio", audioFile);
       formData.append("video", videoFile);
-      const data = await upload("/api/tools/mux", formData, baseName(audioFile.name) + ".mp4");
+      const data = await upload("/api/tools/mux", formData, fileBaseName(audioFile.name) + ".mp4");
       setResult(data);
       toast.success("音视频封装完成");
     } catch (cause) {
@@ -215,6 +228,7 @@ function MuxCard() {
       toast.error(message);
     } finally {
       setBusy(false);
+      setProgressText(null);
     }
   }
 
@@ -226,7 +240,9 @@ function MuxCard() {
           手动音视频混流
         </CardTitle>
         <CardDescription>
-          分别上传音频与视频分片，由服务端 ffmpeg 无损封装为 MP4（单文件上限 500MB）
+          {browserMode
+            ? "服务端未检测到 ffmpeg：改为在浏览器内用 ffmpeg.wasm 无损封装为 MP4（文件不上传，首次约 31MB 引擎）"
+            : "分别上传音频与视频分片，由服务端 ffmpeg 无损封装为 MP4（单文件上限 500MB）"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -247,7 +263,12 @@ function MuxCard() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2 rounded-lg border p-3">
             <p className="text-sm font-medium">音频</p>
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => audioRef.current?.click()}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || unavailable}
+              onClick={() => audioRef.current?.click()}
+            >
               <Upload className="h-4 w-4" />
               选择音频
             </Button>
@@ -257,7 +278,12 @@ function MuxCard() {
           </div>
           <div className="space-y-2 rounded-lg border p-3">
             <p className="text-sm font-medium">视频</p>
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => videoRef.current?.click()}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || unavailable}
+              onClick={() => videoRef.current?.click()}
+            >
               <Upload className="h-4 w-4" />
               选择视频
             </Button>
@@ -266,9 +292,14 @@ function MuxCard() {
             </p>
           </div>
         </div>
-        <Button disabled={busy || !audioFile || !videoFile} onClick={() => void handleMux()}>
+        {unavailable ? (
+          <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            服务端与浏览器端 ffmpeg 均不可用，无法混流。请安装 ffmpeg 或重新构建以生成 public/ffmpeg 资源。
+          </p>
+        ) : null}
+        <Button disabled={busy || unavailable || !audioFile || !videoFile} onClick={() => void handleMux()}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}
-          {busy ? "正在封装…" : "开始混流"}
+          {busy ? progressText ?? "正在封装…" : browserMode ? "在浏览器内混流" : "开始混流"}
         </Button>
         {error ? (
           <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -278,13 +309,13 @@ function MuxCard() {
         {result ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2">
             <div className="flex items-center gap-2 text-sm">
-              <Badge variant="secondary">MP4</Badge>
+              <Badge variant="secondary">{/\.mkv$/i.test(result.fileName) ? "MKV" : "MP4"}</Badge>
               <span className="truncate">{result.fileName}</span>
               <span className="text-xs text-muted-foreground">{formatBytes(result.blob.size)}</span>
             </div>
             <Button size="sm" onClick={() => downloadBlob(result.blob, result.fileName)}>
               <Download className="h-4 w-4" />
-              保存 MP4
+              保存文件
             </Button>
           </div>
         ) : null}
@@ -294,10 +325,17 @@ function MuxCard() {
 }
 
 export function MediaTools() {
+  const { info } = useSystemInfo();
+  // 系统信息加载中先按“可用”处理，避免按钮闪烁禁用
+  const serverFfmpegAvailable = info ? info.ffmpeg.available : true;
+  const browserFfmpegAvailable = info ? info.browserFfmpeg.available : false;
   return (
     <div className="space-y-4">
-      <AudioToMp3Card />
-      <MuxCard />
+      <AudioToMp3Card serverFfmpegAvailable={serverFfmpegAvailable} />
+      <MuxCard
+        serverFfmpegAvailable={serverFfmpegAvailable}
+        browserFfmpegAvailable={browserFfmpegAvailable}
+      />
     </div>
   );
 }

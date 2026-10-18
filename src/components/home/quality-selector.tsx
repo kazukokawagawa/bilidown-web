@@ -183,7 +183,7 @@ export function QualitySelector({
 
         {!ffmpegAvailable ? (
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            未检测到 ffmpeg，内嵌字幕与内嵌弹幕不可用；开启相应选项时将回退为 MP4。
+            未检测到 ffmpeg：内嵌字幕与内嵌弹幕不可用，音视频将分别保存；下载完成后可在下载页用「浏览器合并」在浏览器内合成 MP4（无需安装 ffmpeg）。
           </p>
         ) : null}
 

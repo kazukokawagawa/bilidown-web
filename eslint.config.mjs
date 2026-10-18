@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "release/**",
     "electron/**",
     "next-env.d.ts",
+    // scripts/prepare-ffmpeg-wasm.mjs 从 node_modules 复制的第三方 ESM 产物（构建时生成，不参与源码 lint）
+    "public/ffmpeg/**",
   ]),
 ]);
 

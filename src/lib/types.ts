@@ -201,6 +201,10 @@ export interface DownloadTask {
   filePath: string | null;
   fileName: string | null;
   fileSize: number | null;
+  /** 服务端未合并（format=m4s）时保存的视频分片绝对路径；合并成功时为 null */
+  videoFilePath: string | null;
+  /** 服务端未合并（format=m4s）且含音轨时保存的音频分片绝对路径；其余情况为 null */
+  audioFilePath: string | null;
   error: string | null;
   createdAt: number;
   updatedAt: number;
@@ -299,10 +303,21 @@ export interface FfmpegInfo {
   path?: string;
 }
 
+/** 浏览器端 ffmpeg.wasm（public/ffmpeg）资源是否就绪。 */
+export interface BrowserFfmpegInfo {
+  available: boolean;
+  /** @ffmpeg/core 版本（读取 public/ffmpeg/prepared.json） */
+  version: string | null;
+  /** 首次加载需要下载的 wasm 字节数，未知为 null */
+  coreBytes: number | null;
+}
+
 export interface SystemInfo {
   version: string;
   platform: string;
   ffmpeg: FfmpegInfo;
+  /** 浏览器端 ffmpeg.wasm 资源状态（用于“无服务端 ffmpeg 时浏览器合并”能力） */
+  browserFfmpeg: BrowserFfmpegInfo;
   downloadDir: string;
   downloadDirWritable: boolean;
 }

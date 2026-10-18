@@ -91,6 +91,8 @@ export function normalizeTask(raw: unknown): DownloadTask | null {
     filePath: nullableStr(raw.filePath),
     fileName: nullableStr(raw.fileName),
     fileSize: raw.fileSize === null || raw.fileSize === undefined ? null : num(raw.fileSize, 0),
+    videoFilePath: nullableStr(raw.videoFilePath),
+    audioFilePath: nullableStr(raw.audioFilePath),
     error: nullableStr(raw.error),
     createdAt,
     updatedAt: num(raw.updatedAt, createdAt),
