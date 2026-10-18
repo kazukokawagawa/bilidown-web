@@ -17,6 +17,8 @@ interface QualitySelectorProps {
   selectedCodec: Codec | null;
   audioOnly: boolean;
   embedSubtitles: boolean;
+  embedDanmaku: boolean;
+  saveDanmaku: boolean;
   ffmpegAvailable: boolean;
   isLogin: boolean;
   loading: boolean;
@@ -26,6 +28,8 @@ interface QualitySelectorProps {
   onCodecChange: (codec: Codec) => void;
   onAudioOnlyChange: (value: boolean) => void;
   onEmbedSubtitlesChange: (value: boolean) => void;
+  onEmbedDanmakuChange: (value: boolean) => void;
+  onSaveDanmakuChange: (value: boolean) => void;
 }
 
 export function QualitySelector({
@@ -35,6 +39,8 @@ export function QualitySelector({
   selectedCodec,
   audioOnly,
   embedSubtitles,
+  embedDanmaku,
+  saveDanmaku,
   ffmpegAvailable,
   isLogin,
   loading,
@@ -44,6 +50,8 @@ export function QualitySelector({
   onCodecChange,
   onAudioOnlyChange,
   onEmbedSubtitlesChange,
+  onEmbedDanmakuChange,
+  onSaveDanmakuChange,
 }: QualitySelectorProps) {
   const showSkeleton = loading && qualities.length === 0;
   const selectDisabled = disabled || loading || audioOnly;
@@ -141,9 +149,41 @@ export function QualitySelector({
           />
         </div>
 
+        <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="embed-danmaku" className="text-sm font-medium">
+              内嵌弹幕（MKV 软字幕）
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              把弹幕转换为 ASS 软字幕轨道封装进 MKV，需要 ffmpeg；无弹幕时自动回退。
+            </p>
+          </div>
+          <Switch
+            id="embed-danmaku"
+            checked={embedDanmaku}
+            onCheckedChange={onEmbedDanmakuChange}
+            disabled={disabled || loading || audioOnly || !ffmpegAvailable}
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="save-danmaku" className="text-sm font-medium">
+              单独保存弹幕文件
+            </Label>
+            <p className="text-xs text-muted-foreground">把弹幕 XML 与 ASS 保存到视频同目录的「弹幕」子文件夹。</p>
+          </div>
+          <Switch
+            id="save-danmaku"
+            checked={saveDanmaku}
+            onCheckedChange={onSaveDanmakuChange}
+            disabled={disabled || loading}
+          />
+        </div>
+
         {!ffmpegAvailable ? (
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            未检测到 ffmpeg，内嵌字幕不可用；开启该选项时将回退为 MP4。
+            未检测到 ffmpeg，内嵌字幕与内嵌弹幕不可用；开启相应选项时将回退为 MP4。
           </p>
         ) : null}
 
@@ -153,7 +193,7 @@ export function QualitySelector({
 
         {selectedPartCount > 1 ? (
           <p className="text-xs text-muted-foreground">
-            已选 {selectedPartCount} 个分P，批量创建任务时将统一使用当前清晰度与编码。
+            已选 {selectedPartCount} 个条目（分P/合集），批量创建任务时将统一使用当前清晰度与编码。
           </p>
         ) : null}
 

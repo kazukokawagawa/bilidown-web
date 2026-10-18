@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useVideo } from "@/hooks/use-video";
 import { useSystemInfo } from "@/hooks/use-settings";
+import { CollectionList } from "./collection-list";
 import { DownloadPanel } from "./download-panel";
 import { ParseInput } from "./parse-input";
 import { PartsList } from "./parts-list";
@@ -43,11 +44,18 @@ export function HomeContent() {
     qualityChoices,
     codecChoices,
     selectedPages,
+    selectedEpisodes,
+    collection,
+    totalSelected,
+    selectedPage,
     selectedQn,
     selectedCodec,
     selectedStream,
     audioOnly,
     embedSubtitles,
+    embedDanmaku,
+    saveDanmaku,
+    listFolder,
     parsing,
     streamsLoading,
     creating,
@@ -55,10 +63,14 @@ export function HomeContent() {
     parse,
     togglePage,
     toggleAllPages,
+    toggleEpisode,
+    toggleAllEpisodes,
     selectQn,
     selectCodec,
     setAudioOnly,
     setEmbedSubtitles,
+    setEmbedDanmaku,
+    setSaveDanmaku,
     createDownloads,
   } = useVideo();
 
@@ -89,6 +101,10 @@ export function HomeContent() {
     return () => window.removeEventListener("bilidown:parse-link", handleParseLink);
   }, [parse, setInput]);
 
+  const collectionEpisodeCount = collection
+    ? collection.sections.reduce((count, section) => count + section.episodes.length, 0)
+    : 0;
+
   async function handleDownload() {
     const tasks = await createDownloads();
     if (tasks.length > 0) router.push("/downloads");
@@ -115,14 +131,32 @@ export function HomeContent() {
       ) : video ? (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-6">
-            <VideoCard video={video} parsed={parsed} selectedPages={selectedPages} />
-            <PartsList
-              pages={video.pages}
-              selectedPages={selectedPages.map((page) => page.page)}
-              disabled={parsing}
-              onToggle={togglePage}
-              onToggleAll={toggleAllPages}
+            <VideoCard
+              video={video}
+              parsed={parsed}
+              selectedPages={selectedPages}
+              selectedEpisodesCount={selectedEpisodes.length}
             />
+            {collection && collectionEpisodeCount > 1 ? (
+              <CollectionList
+                title={collection.title}
+                sections={collection.sections}
+                currentEpisodeId={collection.currentEpisodeId}
+                selectedIds={selectedEpisodes.map((episode) => episode.id)}
+                disabled={parsing}
+                onToggle={toggleEpisode}
+                onToggleAll={toggleAllEpisodes}
+              />
+            ) : null}
+            {video.pages.length > 1 ? (
+              <PartsList
+                pages={video.pages}
+                selectedPages={selectedPages.map((page) => page.page)}
+                disabled={parsing}
+                onToggle={togglePage}
+                onToggleAll={toggleAllPages}
+              />
+            ) : null}
           </div>
           <div className="min-w-0 space-y-6">
             <QualitySelector
@@ -132,25 +166,35 @@ export function HomeContent() {
               selectedCodec={selectedCodec}
               audioOnly={audioOnly}
               embedSubtitles={embedSubtitles}
+              embedDanmaku={embedDanmaku}
+              saveDanmaku={saveDanmaku}
               ffmpegAvailable={ffmpegAvailable}
               isLogin={isLogin}
               loading={streamsLoading || parsing}
               disabled={parsing}
-              selectedPartCount={selectedPages.length}
+              selectedPartCount={totalSelected}
               onQnChange={selectQn}
               onCodecChange={selectCodec}
               onAudioOnlyChange={setAudioOnly}
               onEmbedSubtitlesChange={setEmbedSubtitles}
+              onEmbedDanmakuChange={setEmbedDanmaku}
+              onSaveDanmakuChange={setSaveDanmaku}
             />
             <DownloadPanel
               video={video}
               pages={selectedPages}
+              episodes={selectedEpisodes}
+              collectionTitle={collection?.title ?? null}
               qn={selectedQn}
               codec={selectedCodec}
               audioOnly={audioOnly}
               embedSubtitles={embedSubtitles}
+              embedDanmaku={embedDanmaku}
+              saveDanmaku={saveDanmaku}
+              listFolder={listFolder}
               ffmpegAvailable={ffmpegAvailable}
               stream={selectedStream}
+              previewPageNumber={selectedPage?.page}
               creating={creating}
               disabled={!canDownload}
               onDownload={() => {

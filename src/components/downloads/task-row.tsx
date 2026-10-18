@@ -73,14 +73,27 @@ function statusDetail(task: DownloadTask): string {
       }
       return formatSpeed(task.speed) + " · 剩余 " + formatEta(eta);
     }
-    case "merging":
-      return task.embedSubtitles && !task.audioOnly
-        ? "正在合并音视频与字幕…"
-        : "正在合并音视频…";
-    case "completed":
-      return task.subtitleCount > 0
-        ? "已完成 · 已内嵌 " + task.subtitleCount + " 条字幕"
-        : "已完成";
+    case "merging": {
+      const subtitles = task.embedSubtitles && !task.audioOnly;
+      const danmaku = task.embedDanmaku && !task.audioOnly;
+      if (subtitles && danmaku) return "正在合并音视频、字幕与弹幕…";
+      if (subtitles) return "正在合并音视频与字幕…";
+      if (danmaku) return "正在合并音视频与弹幕…";
+      return "正在合并音视频…";
+    }
+    case "completed": {
+      let detail = "已完成";
+      if (task.embedSubtitles && task.subtitleCount > 0) {
+        detail += " · 已内嵌 " + task.subtitleCount + " 条字幕";
+      }
+      if (task.embedDanmaku && task.danmakuCount > 0) {
+        detail += " · 已内嵌 " + task.danmakuCount + " 条弹幕";
+      }
+      if (task.saveDanmaku && task.danmakuCount > 0) {
+        detail += " · 已保存 " + task.danmakuCount + " 条弹幕";
+      }
+      return detail;
+    }
     case "paused":
       return "已暂停，可继续下载";
     case "error":
@@ -160,6 +173,11 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
                     P{task.page} {task.partTitle}
                   </Badge>
                 ) : null}
+                {task.listTitle ? (
+                  <Badge variant="outline" className="max-w-48 truncate font-normal">
+                    列表 · {task.listTitle}
+                  </Badge>
+                ) : null}
                 {task.qualityName ? (
                   <Badge variant="outline" className="font-normal">
                     {task.qualityName}
@@ -178,6 +196,18 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
                     {task.status === "completed" && task.subtitleCount > 0
                       ? "内嵌字幕 ×" + task.subtitleCount
                       : "内嵌字幕"}
+                  </Badge>
+                ) : null}
+                {task.embedDanmaku && !task.audioOnly ? (
+                  <Badge variant="secondary" className="font-normal">
+                    {task.status === "completed" && task.danmakuCount > 0
+                      ? "内嵌弹幕 ×" + task.danmakuCount
+                      : "内嵌弹幕"}
+                  </Badge>
+                ) : null}
+                {task.saveDanmaku ? (
+                  <Badge variant="secondary" className="font-normal">
+                    弹幕文件
                   </Badge>
                 ) : null}
               </div>
@@ -349,6 +379,11 @@ export function TaskRow({ task, busy, onAction }: TaskRowProps) {
           {task.status === "completed" && task.fileName ? (
             <p className="truncate text-xs text-muted-foreground" title={task.fileName}>
               文件名：{task.fileName}
+            </p>
+          ) : null}
+          {task.status === "completed" && task.danmakuPath ? (
+            <p className="truncate text-xs text-muted-foreground" title={task.danmakuPath}>
+              弹幕：{task.danmakuPath}
             </p>
           ) : null}
         </div>

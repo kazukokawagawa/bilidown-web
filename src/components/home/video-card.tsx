@@ -1,8 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-// TODO(合集): view.ugc_season 的合集剧集列表暂未展示，原因见 parts-list.tsx 顶部 TODO。
-
 import type { LucideIcon } from "lucide-react";
 import { ExternalLink, MessageSquare, Play, Star, ThumbsUp } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -47,13 +45,23 @@ function selectedPagesText(pages: VideoPage[]): string {
   return "已选 " + String(pages.length) + " 个分P：" + numbers + (pages.length > 4 ? " 等" : "");
 }
 
+/** 分P 与合集勾选合并展示；都没有勾选时提示先选择。 */
+function selectionText(pages: VideoPage[], selectedEpisodesCount: number): string {
+  const pageText = pages.length > 0 ? selectedPagesText(pages) : null;
+  const episodeText = selectedEpisodesCount > 0 ? "合集已选 " + String(selectedEpisodesCount) + " 集" : null;
+  if (pageText && episodeText) return pageText + " · " + episodeText;
+  return pageText ?? episodeText ?? "未选择分P/合集";
+}
+
 interface VideoCardProps {
   video: VideoInfo;
   parsed: ParsedInput | null;
   selectedPages: VideoPage[];
+  /** 已勾选的合集剧集数（用于底部选择摘要） */
+  selectedEpisodesCount?: number;
 }
 
-export function VideoCard({ video, parsed, selectedPages }: VideoCardProps) {
+export function VideoCard({ video, parsed, selectedPages, selectedEpisodesCount = 0 }: VideoCardProps) {
   const title = stripHtml(video.title);
   const desc = stripHtml(video.desc);
 
@@ -119,7 +127,9 @@ export function VideoCard({ video, parsed, selectedPages }: VideoCardProps) {
           <p className="line-clamp-3 text-sm text-muted-foreground">{desc || "暂无简介"}</p>
 
           <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
-            <span className="max-w-full truncate text-xs text-muted-foreground">{selectedPagesText(selectedPages)}</span>
+            <span className="max-w-full truncate text-xs text-muted-foreground">
+              {selectionText(selectedPages, selectedEpisodesCount)}
+            </span>
             <Button variant="link" size="sm" asChild className="h-auto px-0 text-xs">
               <a
                 href={"https://www.bilibili.com/video/" + video.bvid}

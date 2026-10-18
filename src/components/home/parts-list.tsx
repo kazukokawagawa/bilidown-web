@@ -1,7 +1,6 @@
 "use client";
 
-// TODO(合集): 原版在 view.ugc_season 存在时展示合集剧集列表（sections[].episodes[]）。
-// 当前 src/lib/types.ts 的 VideoInfo 未包含 ugc_season 字段（Lead 所有），待类型扩展后再补充合集勾选。
+// 合集（ugc_season）剧集列表由同目录的 collection-list.tsx 负责，本组件只展示分P。
 
 import { Layers } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

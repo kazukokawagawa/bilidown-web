@@ -65,15 +65,19 @@ export type OutputExtension = ".mp4" | ".m4a" | ".m4s" | ".mkv";
 export function planOutputPath(options: {
   downloadDir: string;
   namingTemplate: string;
-  isMultiPage: boolean;
   context: NamingContext;
   extension: OutputExtension;
+  /** 列表文件夹名（合集标题 / 分P所属视频标题）；为空表示直接保存到下载目录 */
+  folder?: string | null;
+  /** 列表内的序号（分P页码 / 合集剧集序号），用于生成「P<n> 标题」文件名 */
+  index?: number | null;
 }): OutputPlan {
-  const { downloadDir, namingTemplate, isMultiPage, context, extension } = options;
-  if (isMultiPage) {
-    const folder = sanitizeFileName(context.title);
-    const partFileName = sanitizeFileName(`P${context.page} ${context.partTitle || context.title}`);
-    return { dir: path.join(downloadDir, folder), fileName: partFileName + extension };
+  const { downloadDir, namingTemplate, context, extension, folder, index } = options;
+  const folderName = (folder ?? "").trim() ? sanitizeFileName((folder ?? "").trim()) : "";
+  if (folderName) {
+    const prefix = typeof index === "number" && Number.isFinite(index) && index > 0 ? "P" + String(index) + " " : "";
+    const fileName = sanitizeFileName(prefix + (context.partTitle || context.title));
+    return { dir: path.join(downloadDir, folderName), fileName: fileName + extension };
   }
   const base = renderNamingTemplate(namingTemplate || "{title}", context);
   return { dir: downloadDir, fileName: sanitizeFileName(base) + extension };

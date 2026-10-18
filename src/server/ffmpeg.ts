@@ -169,17 +169,19 @@ export async function mergeDashToMp4(options: {
 }
 
 export interface MkvSubtitleInput {
-  /** 本地 SRT 字幕文件路径 */
+  /** 本地字幕文件路径（SRT 或 ASS） */
   path: string;
   /** ISO 639-2 语言码，如 chi / eng */
   language: string;
   /** 轨道标题（展示名） */
   title: string;
+  /** 字幕编码：srt（默认）或 ass（弹幕轨道） */
+  codec?: "srt" | "ass";
 }
 
 /**
- * 合并 DASH 音视频 + 内嵌 SRT 字幕为 MKV（docs/blueprint.md §4）。
- * 命令要点：视频/音频流直接 copy，字幕转 srt 并写入 language/title，首条字幕设为默认轨。
+ * 合并 DASH 音视频 + 内嵌字幕（SRT/ASS）为 MKV（docs/blueprint.md §4）。
+ * 命令要点：视频/音频/字幕流全部 copy，写入 language/title，首条字幕设为默认轨。
  */
 export async function mergeDashToMkv(options: {
   ffmpegPath: string | null | undefined;
@@ -203,7 +205,8 @@ export async function mergeDashToMkv(options: {
     args.push("-map", `${subtitleInputBase + index}:s:0`);
   });
 
-  args.push("-c", "copy", "-c:s", "srt");
+  // 字幕输入本身已是 SRT/ASS，MKV 支持两者，直接 copy 避免重新编码
+  args.push("-c", "copy");
   options.subtitles.forEach((subtitle, index) => {
     args.push("-metadata:s:s:" + index, "language=" + subtitle.language);
     args.push("-metadata:s:s:" + index, "title=" + subtitle.title);

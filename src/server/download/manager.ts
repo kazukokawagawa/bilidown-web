@@ -162,6 +162,15 @@ export class TaskManager {
       audioOnly: input.audioOnly,
       embedSubtitles: Boolean(input.embedSubtitles) && !input.audioOnly,
       subtitleCount: 0,
+      listTitle: input.listTitle && input.listTitle.trim() ? input.listTitle.trim() : null,
+      listIndex:
+        typeof input.listIndex === "number" && Number.isFinite(input.listIndex) && input.listIndex > 0
+          ? Math.trunc(input.listIndex)
+          : null,
+      embedDanmaku: Boolean(input.embedDanmaku) && !input.audioOnly,
+      saveDanmaku: Boolean(input.saveDanmaku),
+      danmakuCount: 0,
+      danmakuPath: null,
     };
     this.tasks.set(task.id, task);
     this.queue.push(task.id);
@@ -209,7 +218,10 @@ export class TaskManager {
   }
 
   private async resume(task: DownloadTask, fresh: boolean): Promise<DownloadTask> {
-    if (this.running.has(task.id)) return { ...task };
+    // 暂停/取消尚在执行器收尾时再次点「继续/重试」：明确提示稍后再试，避免静默无效果
+    if (this.running.has(task.id)) {
+      throw new TaskManagerError("任务正在停止或切换状态，请稍后重试", 409, "TASK_BUSY");
+    }
     if (task.status === "completed") {
       throw new TaskManagerError("任务已完成，无需继续", 400, "INVALID_TASK_STATE");
     }
@@ -434,6 +446,8 @@ export class TaskManager {
         if (result.qualityName) current.qualityName = result.qualityName;
         if (result.codec) current.codec = result.codec;
         if (typeof result.subtitleCount === "number") current.subtitleCount = result.subtitleCount;
+        if (typeof result.danmakuCount === "number") current.danmakuCount = result.danmakuCount;
+        if (result.danmakuPath !== undefined) current.danmakuPath = result.danmakuPath;
         current.error = result.error ?? null;
         if (current.totalBytes > 0) current.downloadedBytes = current.totalBytes;
       } else {

@@ -50,6 +50,13 @@ export async function POST(request: Request) {
     const upName = optionalString(body, "upName", "", 200) ?? "";
     const audioOnly = optionalBoolean(body, "audioOnly", false);
     const embedSubtitles = optionalBoolean(body, "embedSubtitles", settings.embedSubtitles);
+    const embedDanmaku = optionalBoolean(body, "embedDanmaku", settings.embedDanmaku);
+    const saveDanmaku = optionalBoolean(body, "saveDanmaku", settings.saveDanmaku);
+    const listTitle = optionalString(body, "listTitle", undefined, 300) ?? null;
+    const listIndex =
+      body.listIndex === undefined || body.listIndex === null
+        ? null
+        : optionalInteger(body, "listIndex", 0, 1, 100000);
     const sourceUrl =
       optionalString(body, "sourceUrl", "https://www.bilibili.com/video/" + bvid, 2000) ??
       "https://www.bilibili.com/video/" + bvid;
@@ -68,6 +75,10 @@ export async function POST(request: Request) {
       audioOnly,
       sourceUrl,
       embedSubtitles,
+      listTitle,
+      listIndex,
+      embedDanmaku,
+      saveDanmaku,
     };
     const task = await getTaskManager().create(input);
     return apiOk({ task }, 201);

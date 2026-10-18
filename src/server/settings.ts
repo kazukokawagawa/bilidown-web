@@ -1,4 +1,12 @@
-import { DEFAULT_SETTINGS, MAX_DOWNLOAD_THREADS, MIN_DOWNLOAD_THREADS } from "@/lib/constants";
+import {
+  DEFAULT_SETTINGS,
+  MAX_DANMAKU_FONT_SIZE,
+  MAX_DANMAKU_OPACITY,
+  MAX_DOWNLOAD_THREADS,
+  MIN_DANMAKU_FONT_SIZE,
+  MIN_DANMAKU_OPACITY,
+  MIN_DOWNLOAD_THREADS,
+} from "@/lib/constants";
 import type { AppSettings, BiliCookie, Codec, PublicSettings } from "@/lib/types";
 
 import { readJsonFile, SETTINGS_FILE, writeJsonAtomic } from "./paths";
@@ -102,6 +110,17 @@ export function normalizeSettings(raw: unknown): AppSettings {
         ? clampInt(raw.downloadThreads, MIN_DOWNLOAD_THREADS, MAX_DOWNLOAD_THREADS)
         : DEFAULT_SETTINGS.downloadThreads,
     embedSubtitles: normalizeBoolean(raw.embedSubtitles, DEFAULT_SETTINGS.embedSubtitles),
+    listFolder: normalizeBoolean(raw.listFolder, DEFAULT_SETTINGS.listFolder),
+    embedDanmaku: normalizeBoolean(raw.embedDanmaku, DEFAULT_SETTINGS.embedDanmaku),
+    saveDanmaku: normalizeBoolean(raw.saveDanmaku, DEFAULT_SETTINGS.saveDanmaku),
+    danmakuFontSize:
+      typeof raw.danmakuFontSize === "number" && Number.isFinite(raw.danmakuFontSize)
+        ? clampInt(raw.danmakuFontSize, MIN_DANMAKU_FONT_SIZE, MAX_DANMAKU_FONT_SIZE)
+        : DEFAULT_SETTINGS.danmakuFontSize,
+    danmakuOpacity:
+      typeof raw.danmakuOpacity === "number" && Number.isFinite(raw.danmakuOpacity)
+        ? Math.round(Math.min(MAX_DANMAKU_OPACITY, Math.max(MIN_DANMAKU_OPACITY, raw.danmakuOpacity)) * 100) / 100
+        : DEFAULT_SETTINGS.danmakuOpacity,
   };
 }
 
@@ -177,11 +196,43 @@ export function normalizeSettingsPatch(raw: unknown): Partial<AppSettings> {
     if (typeof raw.embedSubtitles !== "boolean") throw new SettingsValidationError("embedSubtitles 必须是布尔值");
     patch.embedSubtitles = raw.embedSubtitles;
   }
-  for (const key of ["clipboardWatch", "autoCheckUpdate", "saveTaskHistory", "deleteTempAfterMerge"] as const) {
+  for (const key of [
+    "clipboardWatch",
+    "autoCheckUpdate",
+    "saveTaskHistory",
+    "deleteTempAfterMerge",
+    "listFolder",
+    "embedDanmaku",
+    "saveDanmaku",
+  ] as const) {
     if (key in raw) {
       if (typeof raw[key] !== "boolean") throw new SettingsValidationError(`${key} 必须是布尔值`);
       patch[key] = raw[key];
     }
+  }
+  if ("danmakuFontSize" in raw) {
+    const value = raw.danmakuFontSize;
+    if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+      throw new SettingsValidationError("danmakuFontSize 必须是整数");
+    }
+    if (value < MIN_DANMAKU_FONT_SIZE || value > MAX_DANMAKU_FONT_SIZE) {
+      throw new SettingsValidationError(
+        `danmakuFontSize 取值范围为 ${MIN_DANMAKU_FONT_SIZE}~${MAX_DANMAKU_FONT_SIZE}`,
+      );
+    }
+    patch.danmakuFontSize = value;
+  }
+  if ("danmakuOpacity" in raw) {
+    const value = raw.danmakuOpacity;
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new SettingsValidationError("danmakuOpacity 必须是数字");
+    }
+    if (value < MIN_DANMAKU_OPACITY || value > MAX_DANMAKU_OPACITY) {
+      throw new SettingsValidationError(
+        `danmakuOpacity 取值范围为 ${MIN_DANMAKU_OPACITY}~${MAX_DANMAKU_OPACITY}`,
+      );
+    }
+    patch.danmakuOpacity = Math.round(value * 100) / 100;
   }
   return patch;
 }

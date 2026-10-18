@@ -65,11 +65,11 @@ npm run electron:build
 
 | 路由 | 功能 |
 |---|---|
-| `/` 首页 | 解析任意输入（BV/av/链接/b23 短链/ep/ss）→ 展示视频信息、封面、UP主、统计、分P列表 → 选择分P（多选批量）、清晰度、编码（AVC/HEVC/AV1）、仅音频 → 创建下载任务；官方 iframe 在线预览；最近任务 |
+| `/` 首页 | 解析任意输入（BV/av/链接/b23 短链/ep/ss）→ 展示视频信息、封面、UP主、统计、**分P列表与合集（ugc_season）剧集列表** → 勾选分P/合集批量下载、清晰度、编码（AVC/HEVC/AV1）、仅音频、**内嵌弹幕 / 单独保存弹幕文件** → 批量创建下载任务（列表下载按列表名建子文件夹）；官方 iframe 在线预览；最近任务 |
 | `/search` 搜索 | **增强功能**（原桌面版没有关键词搜索接口）：B站关键词搜索（视频/UP主、排序、分页）；搜索不可用时可直接回首页粘贴链接 |
-| `/downloads` 下载 | 任务统计 + 状态 Tabs；实时进度（SSE）、速度、剩余时间；暂停/继续/取消/重试/删除；下载文件、复制路径；导出/导入 JSON、清理已完成、清空全部 |
+| `/downloads` 下载 | 任务统计 + 状态 Tabs；实时进度（SSE）、速度、剩余时间；暂停/继续/取消/重试/删除；下载文件、复制路径；**列表名 / 内嵌弹幕 / 弹幕文件徽标与弹幕数量、弹幕文件夹路径**；导出/导入 JSON、清理已完成、清空全部 |
 | `/account` 账号 | B站扫码登录（服务端保存 Cookie）、用户信息、退出登录；登录后可下载 1080P+ 等高清清晰度 |
-| `/settings` 设置 | 下载目录、命名模板、最大并发、默认清晰度、优先编码、ffmpeg 检测、合并开关、主题（浅色/深色/跟随系统）、剪贴板监听、自动检查更新、代理、清空记录/恢复默认 |
+| `/settings` 设置 | 下载目录、命名模板、最大并发、默认清晰度、优先编码、ffmpeg 检测、合并开关、字幕内嵌、**列表单独文件夹、弹幕内嵌、单独保存弹幕、弹幕字号/不透明度**、主题（浅色/深色/跟随系统）、剪贴板监听、自动检查更新、代理、清空记录/恢复默认 |
 | `/tools` 工具 | 链接解析、BV ⇄ AV 互转、CC 字幕 JSON → SRT、SRT → 纯文本、封面提取、音频转 MP3、音视频手动混流、正则测试 |
 
 ### 下载流程（与原版对应）
@@ -79,9 +79,31 @@ npm run electron:build
 3. 建任务 → `POST /api/tasks`，服务端下载引擎：
    - 用当前登录 Cookie 重新取流（不信任过期直链）
    - 流式下载 video/audio 到 `downloads/.tmp/<taskId>/`，支持 backupUrl 切换、Range 续传、暂停/取消
+   - 需要时拉取 B 站 CC 字幕（SRT）与弹幕 XML，弹幕转 ASS；`ffmpeg` 合并音视频并把字幕/弹幕封装为 MKV 软字幕轨道（无 ffmpeg 时回退 MP4/M4A）
    - `ffmpeg -y -i video.m4s -i audio.m4s -c copy -movflags +faststart <name>.mp4` 合并（仅音频则直接保存 .m4a）
-   - 按命名模板落盘，更新任务状态与 `data/tasks.json`
+   - 按命名模板落盘；列表（合集/多P）任务按列表名建子文件夹；勾选「单独保存弹幕文件」时把 XML/ASS 写入同目录的 `弹幕/` 子文件夹
+   - 更新任务状态与 `data/tasks.json`
 4. 进度通过 `GET /api/tasks/events`（SSE）实时推送到前端；完成后可 `GET /api/tasks/[id]/file` 下载（支持 Range）。
+
+### 批量下载、列表文件夹与弹幕
+
+- 首页解析出**合集（ugc_season）**时展示「合集列表」，可勾选/全选剧集；多P视频展示「分P 列表」。分P与合集选择会合并去重后批量创建任务。
+- 任务携带 `listTitle` / `listIndex`：默认（设置页「列表下载单独文件夹」开启）落在 `<下载目录>/<列表名>/P<序号> <标题>.<ext>`，关闭后直接落下载目录。
+- 「内嵌弹幕」把弹幕 XML 转成 ASS 并作为 MKV 的软字幕轨道封装（不重编码，播放器可开关）；「单独保存弹幕文件」把同一份 XML 与 ASS 保存到视频同目录的 `弹幕/` 子文件夹。
+- 弹幕字号、不透明度在设置页配置；弹幕接口失败或无弹幕时任务仍正常完成，并在任务上给出提示。
+
+```text
+downloads/
+├─ 单视频.mp4
+├─ 单视频.mkv                      # 内嵌字幕/弹幕
+└─ 合集名/
+   ├─ P1 第1集.mp4
+   ├─ P2 第2集.mkv                 # 内嵌弹幕
+   └─ 弹幕/
+      ├─ P1 第1集.xml
+      ├─ P1 第1集.ass
+      └─ P2 第2集.xml
+```
 
 ## 桌面版（Electron）能力
 
@@ -147,8 +169,8 @@ bilidown-web/
 | electron-updater 自动更新安装 | 保留「检查更新」（读取更新源 latest.yml），不自动安装 |
 | 打开资源管理器 / 选择目录对话框 | 「复制路径」+ 浏览器下载文件；**桌面版支持原生目录选择与资源管理器定位** |
 | Plyr + mp4 直链预览 | 官方 `player.bilibili.com` iframe 预览（直链有 Referer 限制） |
-| 合集（ugc_season）勾选下载 | 分P多选已实现；合集勾选留 TODO |
-| 弹幕 XML/ASS、NFO 刮削、封面/字幕随视频下载 | 本期未迁移（原版「自定义批量」9 种类型），可后续扩展 |
+| 合集（ugc_season）勾选下载 | **已实现**：合集剧集多选/全选、批量建任务、按合集名建子文件夹 |
+| 弹幕 XML/ASS、NFO 刮削、封面/字幕随视频下载 | **弹幕已支持**（内嵌为 MKV 的 ASS 软字幕轨道，和/或单独保存 XML+ASS 到「弹幕」子文件夹）；NFO 刮削、封面随视频下载仍未迁移 |
 | 导出 `.bilidownexport`（XOR 54 混淆） | 导出/导入普通 JSON；导入兼容原版 XOR 54 格式 |
 
 ## 验证记录（迁移完成时）
@@ -174,8 +196,24 @@ bilidown-web/
 - B站接口可能随版本变化；如遇风控可配置登录 Cookie（账号页扫码）提高成功率。
 - 代理设置目前仅持久化字段，下载请求未实现代理转发（标注为限制）。
 - 内置下载引擎为单进程内存队列，重启时进行中的任务会重置为「已暂停」，可在下载页手动继续。
-- 桌面版使用内置下载引擎（不依赖 aria2c），未实现原版「自定义批量」9 种下载类型（弹幕/刮削/字幕等）。
+- 桌面版使用内置下载引擎（不依赖 aria2c），原版「自定义批量」的 NFO 刮削、封面随视频下载等类型仍未迁移；弹幕（内嵌/单独保存）与字幕内嵌已支持。
+- 弹幕来自 B 站公开的 XML 接口，仅返回近期/常用弹幕（实测热门视频 1200~7200 条不等，接口限制），不是全量历史弹幕；接口风控失败时下载会跳过弹幕并给出提示。
+- 「内嵌弹幕」是封装为 MKV 的 ASS 软字幕轨道（可用播放器字幕菜单开关，不重新编码视频），不是把弹幕烧录进画面；需要播放器支持 ASS 字幕（VLC / PotPlayer / mpv 等）。
 - 桌面版使用系统原生窗口边框（原版为无边框自绘标题栏），以换取稳定的缩放/最大化行为。
+
+## 验证记录（合集批量 / 列表文件夹 / 弹幕功能）
+
+- 静态检查：`npx tsc --noEmit`、`npx eslint`（src/server、src/app/api、src/hooks/use-video.ts、src/components/home、settings、downloads）均 0 错误 0 警告；`npm run build`（Next 16 + Turbopack）通过，全部路由编译成功并生成 standalone 产物。
+- 合集映射：`GET /api/bili/video?input=BV1JD4y1U72G` → 合集「白勺啊达•生草鬼畜」4 个 section / 95 集，`currentEpisodeId` 与当前视频一致；非合集视频 `collection=null`。
+- 列表文件夹 + 内嵌弹幕（实测）：合集剧集任务（qn=16，`embedDanmaku`+`saveDanmaku`）→ `downloads/<合集名>/P1 神 女 二 人 转.mkv`；`ffprobe` 显示 h264 + aac + **ass 字幕轨（default=1、language=chi、title=弹幕）**，音视频均为 `copy` 未重编码；任务 `danmakuCount=315`；同目录 `弹幕/P1 ….xml`（315 个 `<d>`）与 `弹幕/P1 ….ass`（315 条 Dialogue）均生成。
+- 单独保存弹幕：`saveDanmaku`-only 任务 → MP4 + `弹幕/*.xml|.ass`；无弹幕视频（真实 stat.danmaku=0）→ 任务 completed、格式回退 MP4、提示「该视频没有可用弹幕」且不创建弹幕目录。
+- 多P 列表：`BV1BKhH6qEh9` 的 P2/P3 打上 `listTitle` 后 → `downloads/<视频标题>/P2 ….mkv`、`P3 ….mp4`；关闭「列表下载单独文件夹」后直接落下载根目录。
+- 弹幕时长 clamp：23s 视频内嵌弹幕后 MKV 容器 duration = 23.000s（修复前会被最后几条弹幕事件拉长到 29.45s）。
+- 设置校验：`PUT /api/settings` 对 `danmakuFontSize` 19/81/40.5、`danmakuOpacity` 0.05/1.01 等返回 400 INVALID_SETTINGS；边界值 20/80/0.1/1 持久化成功；未知字段忽略。
+- 导出/导入：导出的任务 JSON 含 `listTitle/listIndex/embedDanmaku/saveDanmaku/danmakuCount/danmakuPath`；删除后重新导入字段完整保留；缺少新字段的旧 JSON 导入为默认值（null/false/0）。
+- UI：无头 Edge（真实接口 + CDP 交互）验证首页渲染「合集列表（95）」、当前集徽标、全选与两个弹幕开关；设置页渲染新设置项；下载页渲染「列表 · xxx」「内嵌弹幕 ×N」「弹幕文件」「弹幕：路径」且无 console error。
+- 生产模式：重建后 `node scripts/start-standalone.mjs --port 3100` 与开发模式 `next dev:3000` 均 `/`、`/settings`、`/downloads` HTTP 200；`GET /api/tasks/[id]/file` 支持 Range（206，`bytes 0-15/74819875`）。
+- 独立验收：另起验收角色做代码审阅 + 独立 E2E + 弹幕模块单元测试（42/42）通过，结论 PASS。
 
 ## 相关文档
 

@@ -2,9 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { FileHandle } from "node:fs/promises";
 
+import { DANMAKU_FOLDER_NAME } from "@/lib/constants";
 import type { Codec, DownloadTask, StreamSource, VideoInfo } from "@/lib/types";
 
 import { buildBiliHeaders, getPlayStreams, getVideoInfo } from "../bili/client";
+import { buildDanmakuAss, fetchVideoDanmaku, type DanmakuFetchResult } from "../bili/danmaku";
 import { cuesToSrt, downloadSubtitleCues, getVideoSubtitles, subtitleLanguageCode } from "../bili/subtitles";
 import {
   detectFfmpeg,
@@ -51,6 +53,10 @@ export interface WorkerResult {
   codec?: Codec;
   /** 实际内嵌的字幕轨道数（0 表示未内嵌） */
   subtitleCount?: number;
+  /** 实际获取到的弹幕条数 */
+  danmakuCount?: number;
+  /** 单独保存弹幕时的弹幕文件夹绝对路径 */
+  danmakuPath?: string | null;
 }
 
 function errorMessage(error: unknown): string {
@@ -507,8 +513,11 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
     videoInfo?.pages.find((page) => page.cid === task.cid) ?? videoInfo?.pages[task.page - 1];
   const isMultiPage = Boolean(videoInfo && videoInfo.pages.length > 1);
   const duration = pageInfo?.duration ?? videoInfo?.duration ?? 0;
-  const title = videoInfo?.title ?? task.title;
-  const partTitle = pageInfo?.title ?? task.partTitle;
+  // 列表任务（合集/分P批量）以创建任务时的标题为准：合集剧集标题可能与视频自身标题不同，
+  // 文件命名应和首页列表显示保持一致；非列表任务仍用最新拉取的视频信息。
+  const isListTask = Boolean(task.listTitle && task.listTitle.trim());
+  const title = isListTask ? task.title : (videoInfo?.title ?? task.title);
+  const partTitle = isListTask ? (task.partTitle || task.title) : (pageInfo?.title ?? task.partTitle);
   const upName = videoInfo?.owner.name ?? task.upName;
 
   // 2. 使用服务端最新 cookie 重新获取播放地址（不信任客户端 URL）
@@ -650,7 +659,7 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
     } else {
       console.warn("[worker] 缺少 aid，跳过字幕获取");
     }
-    if (subtitleInputs.length === 0) embedWarning = "未找到可用的 B 站字幕，已按 MP4 保存";
+    if (subtitleInputs.length === 0) embedWarning = "未找到可用的 B 站字幕，已跳过字幕内嵌";
   } else if (task.embedSubtitles && !task.audioOnly) {
     embedWarning = !settings.mergeWithFfmpeg
       ? "已在设置中关闭 ffmpeg 合并，无法内嵌字幕"
@@ -658,20 +667,110 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
   }
   throwIfAborted(signal);
 
-  // 5. 生成最终文件名（内嵌字幕成功时为 .mkv）
-  const wantMkv = subtitleInputs.length > 0;
+  // 4.5 弹幕准备：可内嵌为 MKV 的 ASS 软字幕轨道，也可单独保存 XML/ASS 到「弹幕」文件夹
+  const wantEmbedDanmaku = !task.audioOnly && task.embedDanmaku;
+  const wantSaveDanmaku = task.saveDanmaku;
+  let danmaku: DanmakuFetchResult | null = null;
+  let danmakuWarning: string | null = null;
+  if (wantEmbedDanmaku || wantSaveDanmaku) {
+    try {
+      danmaku = await fetchVideoDanmaku({ cid: task.cid, cookie: settings.cookie, signal });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      danmakuWarning = "弹幕获取失败：" + errorMessage(error);
+      console.warn("[worker] 弹幕获取失败，跳过弹幕处理:", errorMessage(error));
+    }
+    if (danmaku && danmaku.entries.length === 0) {
+      danmakuWarning = danmakuWarning ?? "该视频没有可用弹幕";
+    }
+  }
+  let danmakuAssPath: string | null = null;
+  if (danmaku && danmaku.entries.length > 0) {
+    danmakuAssPath = path.join(tmpDir, "danmaku.ass");
+    await fs.writeFile(
+      danmakuAssPath,
+      buildDanmakuAss(danmaku.entries, {
+        fontSize: settings.danmakuFontSize,
+        opacity: settings.danmakuOpacity,
+        duration,
+      }),
+      "utf8",
+    );
+  }
+  const canEmbedDanmaku =
+    wantEmbedDanmaku &&
+    ffmpegInfo.available &&
+    settings.mergeWithFfmpeg &&
+    Boolean(danmakuAssPath);
+  if (wantEmbedDanmaku && !canEmbedDanmaku && !danmakuWarning) {
+    danmakuWarning =
+      ffmpegInfo.available && settings.mergeWithFfmpeg
+        ? "未能生成弹幕字幕，跳过内嵌"
+        : "未检测到可用的 ffmpeg，无法内嵌弹幕";
+  }
+  throwIfAborted(signal);
+
+  // 5. 生成最终文件名（内嵌字幕/弹幕成功时为 .mkv；列表下载时放入列表子文件夹）
+  const wantMkv = subtitleInputs.length > 0 || canEmbedDanmaku;
   const extension: OutputExtension = task.audioOnly ? ".m4a" : wantMkv ? ".mkv" : ".mp4";
+  // 列表文件夹：优先使用任务记录的列表名；旧任务（无 listTitle）沿用「多P视频按标题建文件夹」行为
+  let listFolder: string | null = null;
+  let listIndex: number | null = null;
+  if (settings.listFolder) {
+    if (task.listTitle) {
+      listFolder = task.listTitle;
+      listIndex = task.listIndex ?? null;
+    } else if (isMultiPage) {
+      listFolder = title;
+      listIndex = task.page;
+    }
+  }
   const plan = planOutputPath({
     downloadDir,
     namingTemplate: settings.namingTemplate,
-    isMultiPage,
     context: namingContext,
     extension,
+    folder: listFolder,
+    index: listIndex,
   });
   if (!task.audioOnly && !hasAudioTrack) {
     plan.fileName = "无声-" + plan.fileName;
   }
   const output = await reserveOutputPath(plan.dir, plan.fileName);
+
+  /** 汇总非致命告警（字幕/弹幕/降级），写入任务 error 字段展示。 */
+  const buildWarning = (): string | null => {
+    const parts = [embedWarning, danmakuWarning].filter((item): item is string => Boolean(item));
+    return parts.length ? parts.join("；") : null;
+  };
+
+  /** 把弹幕 XML/ASS 单独保存到视频同目录的「弹幕」子文件夹。 */
+  const saveDanmakuFiles = async (
+    dir: string,
+    fileName: string,
+  ): Promise<{ count: number; path: string | null }> => {
+    const count = danmaku?.entries.length ?? 0;
+    if (!wantSaveDanmaku || !danmaku || count === 0) return { count, path: null };
+    try {
+      const danmakuDir = path.join(dir, DANMAKU_FOLDER_NAME);
+      await ensureDir(danmakuDir);
+      const base = path.parse(fileName).name;
+      await fs.writeFile(path.join(danmakuDir, base + ".xml"), danmaku.xml, "utf8");
+      await fs.writeFile(
+        path.join(danmakuDir, base + ".ass"),
+        buildDanmakuAss(danmaku.entries, {
+          fontSize: settings.danmakuFontSize,
+          opacity: settings.danmakuOpacity,
+          duration,
+        }),
+        "utf8",
+      );
+      return { count, path: danmakuDir };
+    } catch (error) {
+      console.warn("[worker] 保存弹幕文件失败:", errorMessage(error));
+      return { count, path: null };
+    }
+  };
 
   // 6. 合并/转封装
   patch({ status: "merging" });
@@ -696,10 +795,11 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
     }
     await moveFile(sourcePath, output.filePath);
     const size = await fileSize(output.filePath);
+    const danmakuInfo = await saveDanmakuFiles(output.dir, output.fileName);
     await cleanupTaskTemp(downloadDir, task.id);
     return {
       status: "completed",
-      error: null,
+      error: buildWarning(),
       filePath: output.filePath,
       fileName: output.fileName,
       fileSize: size,
@@ -708,6 +808,8 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
       qualityName: selected.label,
       codec: selected.codec,
       subtitleCount: 0,
+      danmakuCount: danmakuInfo.count,
+      danmakuPath: danmakuInfo.path,
     };
   }
 
@@ -717,20 +819,25 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
     if (wantMkv) {
       const mergedMkv = path.join(tmpDir, "merged.mkv");
       try {
+        const mkvSubtitles: MkvSubtitleInput[] = [...subtitleInputs];
+        if (canEmbedDanmaku && danmakuAssPath) {
+          mkvSubtitles.push({ path: danmakuAssPath, language: "chi", title: "弹幕", codec: "ass" });
+        }
         await mergeDashToMkv({
           ffmpegPath: settings.ffmpegPath,
           videoPath: videoTmp,
           audioPath: hasAudio ? audioTmp : null,
-          subtitles: subtitleInputs,
+          subtitles: mkvSubtitles,
           outputPath: mergedMkv,
           signal,
         });
         await moveFile(mergedMkv, output.filePath);
         const size = await fileSize(output.filePath);
+        const danmakuInfo = await saveDanmakuFiles(output.dir, output.fileName);
         await cleanupTaskTemp(downloadDir, task.id);
         return {
           status: "completed",
-          error: null,
+          error: buildWarning(),
           filePath: output.filePath,
           fileName: output.fileName,
           fileSize: size,
@@ -739,11 +846,19 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
           qualityName: selected.label,
           codec: selected.codec,
           subtitleCount: subtitleInputs.length,
+          danmakuCount: danmakuInfo.count,
+          danmakuPath: danmakuInfo.path,
         };
       } catch (error) {
         if (signal.aborted) throw error;
-        console.warn("[worker] 字幕内嵌合并失败，回退 MP4:", errorMessage(error));
-        embedWarning = "字幕内嵌合并失败，已按 MP4 保存";
+        console.warn("[worker] 字幕/弹幕内嵌合并失败，回退 MP4:", errorMessage(error));
+        const failedParts = [
+          subtitleInputs.length > 0 ? "字幕" : "",
+          canEmbedDanmaku ? "弹幕" : "",
+        ]
+          .filter(Boolean)
+          .join("/");
+        embedWarning = (failedParts || "字幕") + "内嵌合并失败，已按 MP4 保存";
       }
     }
 
@@ -753,9 +868,10 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
       const mp4Plan = planOutputPath({
         downloadDir,
         namingTemplate: settings.namingTemplate,
-        isMultiPage,
         context: namingContext,
         extension: ".mp4",
+        folder: listFolder,
+        index: listIndex,
       });
       if (!hasAudioTrack) mp4Plan.fileName = "无声-" + mp4Plan.fileName;
       mp4Target = await reserveOutputPath(mp4Plan.dir, mp4Plan.fileName);
@@ -780,10 +896,11 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
       }
       await moveFile(merged, mp4Target.filePath);
       const size = await fileSize(mp4Target.filePath);
+      const danmakuInfo = await saveDanmakuFiles(mp4Target.dir, mp4Target.fileName);
       await cleanupTaskTemp(downloadDir, task.id);
       return {
         status: "completed",
-        error: embedWarning,
+        error: buildWarning(),
         filePath: mp4Target.filePath,
         fileName: mp4Target.fileName,
         fileSize: size,
@@ -792,6 +909,8 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
         qualityName: selected.label,
         codec: selected.codec,
         subtitleCount: 0,
+        danmakuCount: danmakuInfo.count,
+        danmakuPath: danmakuInfo.path,
       };
     } catch (error) {
       if (signal.aborted) throw error;
@@ -803,9 +922,10 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
   const degradedPlan = planOutputPath({
     downloadDir,
     namingTemplate: settings.namingTemplate,
-    isMultiPage,
     context: namingContext,
     extension: ".mp4",
+    folder: listFolder,
+    index: listIndex,
   });
   if (!task.audioOnly && !hasAudioTrack) degradedPlan.fileName = "无声-" + degradedPlan.fileName;
   const baseName = degradedPlan.fileName.replace(/\.mp4$/i, "");
@@ -817,13 +937,15 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
     await moveFile(audioTmp, audioOutput.filePath);
     totalSize += await fileSize(audioOutput.filePath);
   }
+  // 降级时视频文件名为 <name>.video.m4s；弹幕文件改用原始 <name> 作为 basename，避免出现 <name>.video.xml
+  const danmakuInfo = await saveDanmakuFiles(videoOutput.dir, degradedPlan.fileName);
   await cleanupTaskTemp(downloadDir, task.id);
   const fallbackWarning = !settings.mergeWithFfmpeg
     ? "已在设置中关闭 ffmpeg 合并，已分别保存音视频文件"
     : ffmpegInfo.available
       ? "ffmpeg 合并失败，已分别保存音视频文件"
       : "未检测到可用的 ffmpeg，已分别保存音视频文件";
-  const warning = [embedWarning, fallbackWarning].filter((item): item is string => Boolean(item)).join("；");
+  const warning = [buildWarning(), fallbackWarning].filter((item): item is string => Boolean(item)).join("；");
   return {
     status: "completed",
     error: warning || null,
@@ -835,5 +957,7 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
     qualityName: selected.label,
     codec: selected.codec,
     subtitleCount: 0,
+    danmakuCount: danmakuInfo.count,
+    danmakuPath: danmakuInfo.path,
   };
 }

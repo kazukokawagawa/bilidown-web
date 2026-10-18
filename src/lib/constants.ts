@@ -73,7 +73,22 @@ export const DEFAULT_SETTINGS: AppSettings = {
   deleteTempAfterMerge: true,
   downloadThreads: 4,
   embedSubtitles: false,
+  listFolder: true,
+  embedDanmaku: false,
+  saveDanmaku: false,
+  danmakuFontSize: 40,
+  danmakuOpacity: 0.8,
 };
+
+/** 单独保存弹幕时使用的子文件夹名（位于视频文件同目录下） */
+export const DANMAKU_FOLDER_NAME = "弹幕";
+
+export const MIN_DANMAKU_FONT_SIZE = 20;
+export const MAX_DANMAKU_FONT_SIZE = 80;
+export const MIN_DANMAKU_OPACITY = 0.1;
+export const MAX_DANMAKU_OPACITY = 1;
+/** 弹幕不透明度可选项（设置页下拉） */
+export const DANMAKU_OPACITY_OPTIONS = [0.3, 0.5, 0.7, 0.8, 0.9, 1] as const;
 
 /** 单文件下载线程数可选值（1 = 单连接，>1 = 多连接分片下载）。 */
 export const DOWNLOAD_THREAD_OPTIONS = [1, 2, 4, 8] as const;

@@ -100,6 +100,15 @@ export function normalizeTask(raw: unknown): DownloadTask | null {
     audioOnly: raw.audioOnly === true,
     embedSubtitles: raw.embedSubtitles === true,
     subtitleCount: Math.max(0, Math.trunc(num(raw.subtitleCount, 0))),
+    listTitle: nullableStr(raw.listTitle),
+    listIndex: (() => {
+      const index = num(raw.listIndex, 0);
+      return index > 0 ? Math.trunc(index) : null;
+    })(),
+    embedDanmaku: raw.embedDanmaku === true,
+    saveDanmaku: raw.saveDanmaku === true,
+    danmakuCount: Math.max(0, Math.trunc(num(raw.danmakuCount, 0))),
+    danmakuPath: nullableStr(raw.danmakuPath),
   };
 }
 

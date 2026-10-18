@@ -12,6 +12,8 @@ import type {
   BiliCookie,
   BiliUser,
   Codec,
+  CollectionEpisode,
+  CollectionSection,
   LoginPollStatus,
   NavResponse,
   ParsedInput,
@@ -23,6 +25,7 @@ import type {
   StreamDetail,
   StreamSource,
   StreamsResponse,
+  VideoCollection,
   VideoInfo,
   VideoPage,
   VideoStat,
@@ -363,9 +366,34 @@ export async function resolveInput(input: string, cookie?: BiliCookie): Promise<
 
 /* ---------------------------------------------------------------- 视频信息 */
 
+interface RawSeasonEpisode {
+  id?: number;
+  aid?: number;
+  bvid?: string;
+  cid?: number;
+  title?: string;
+  arc?: { aid?: number; title?: string; pic?: string; pubdate?: number; duration?: number };
+  page?: { cid?: number; page?: number; part?: string; duration?: number };
+}
+
+interface RawSeasonSection {
+  id?: number;
+  section_id?: number;
+  title?: string;
+  episodes?: RawSeasonEpisode[] | null;
+}
+
+interface RawUgcSeason {
+  id?: number;
+  season_id?: number;
+  title?: string;
+  sections?: RawSeasonSection[] | null;
+}
+
 interface RawViewData {
   bvid?: string;
   aid?: number;
+  cid?: number;
   title?: string;
   pic?: string;
   desc?: string;
@@ -375,11 +403,57 @@ interface RawViewData {
   owner?: { mid?: number; name?: string; face?: string };
   stat?: Record<string, number | undefined>;
   pages?: Array<{ cid?: number; page?: number; part?: string; title?: string; duration?: number }>;
+  ugc_season?: RawUgcSeason | null;
 }
 
 export interface VideoId {
   bvid?: string;
   aid?: number;
+}
+
+/** 把 view.ugc_season 映射为前端的 VideoCollection；非合集返回 null。 */
+function mapVideoCollection(raw: RawUgcSeason | null | undefined, current: { bvid: string; cid: number }): VideoCollection | null {
+  if (!raw) return null;
+  const rawSections = Array.isArray(raw.sections) ? raw.sections : [];
+  const sections: CollectionSection[] = [];
+  let currentEpisodeId: number | null = null;
+  for (const rawSection of rawSections) {
+    if (!rawSection || typeof rawSection !== "object") continue;
+    const episodes: CollectionEpisode[] = [];
+    for (const rawEpisode of rawSection.episodes ?? []) {
+      if (!rawEpisode || typeof rawEpisode !== "object") continue;
+      const bvid = strOr(rawEpisode.bvid, "");
+      const cid = numOr(rawEpisode.cid, numOr(rawEpisode.page?.cid, 0));
+      if (!bvid || cid <= 0) continue;
+      const id = numOr(rawEpisode.id, 0);
+      const episode: CollectionEpisode = {
+        id,
+        aid: numOr(rawEpisode.aid, numOr(rawEpisode.arc?.aid, 0)),
+        bvid,
+        cid,
+        page: Math.max(1, numOr(rawEpisode.page?.page, 1)),
+        title: strOr(rawEpisode.title, strOr(rawEpisode.page?.part, strOr(rawEpisode.arc?.title, bvid))),
+        duration: numOr(rawEpisode.arc?.duration, numOr(rawEpisode.page?.duration, 0)),
+        cover: normalizeImageUrl(rawEpisode.arc?.pic),
+        pubdate: numOr(rawEpisode.arc?.pubdate, 0),
+      };
+      if (bvid === current.bvid && cid === current.cid) currentEpisodeId = id;
+      episodes.push(episode);
+    }
+    if (!episodes.length) continue;
+    sections.push({
+      id: numOr(rawSection.section_id, numOr(rawSection.id, 0)),
+      title: strOr(rawSection.title, strOr(raw.title, "合集")),
+      episodes,
+    });
+  }
+  if (!sections.length) return null;
+  return {
+    id: numOr(raw.id, numOr(raw.season_id, 0)),
+    title: strOr(raw.title, "合集"),
+    sections,
+    currentEpisodeId,
+  };
 }
 
 export async function getVideoInfo(id: VideoId, cookie?: BiliCookie): Promise<VideoInfo> {
@@ -427,6 +501,10 @@ export async function getVideoInfo(id: VideoId, cookie?: BiliCookie): Promise<Vi
     stat,
     pages: pages.length ? pages : [{ cid: 0, page: 1, title: "P1", duration: numOr(data.duration, 0) }],
     videos: numOr(data.videos, pages.length || 1),
+    collection: mapVideoCollection(data.ugc_season, {
+      bvid,
+      cid: numOr(data.cid, pages[0]?.cid ?? 0),
+    }),
   };
 }
 

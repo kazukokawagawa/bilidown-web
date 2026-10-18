@@ -39,6 +39,37 @@ export interface VideoPage {
   duration: number;
 }
 
+/** 合集（ugc_season）中的一集 */
+export interface CollectionEpisode {
+  /** 合集剧集 id（ugc_season.sections[].episodes[].id） */
+  id: number;
+  aid: number;
+  bvid: string;
+  cid: number;
+  /** 该剧集视频内部的页码（通常为 1） */
+  page: number;
+  title: string;
+  duration: number;
+  cover: string;
+  pubdate: number;
+}
+
+export interface CollectionSection {
+  id: number;
+  title: string;
+  episodes: CollectionEpisode[];
+}
+
+/** B站视频所属合集（ugc_season）；非合集视频为 null */
+export interface VideoCollection {
+  id: number;
+  /** 合集总标题，下载时作为列表文件夹名 */
+  title: string;
+  sections: CollectionSection[];
+  /** 当前解析视频对应的剧集 id（用于默认勾选） */
+  currentEpisodeId: number | null;
+}
+
 export interface VideoInfo {
   bvid: string;
   aid: number;
@@ -51,6 +82,8 @@ export interface VideoInfo {
   stat: VideoStat;
   pages: VideoPage[];
   videos: number;
+  /** 视频所属合集（ugc_season）；非合集视频为 null */
+  collection: VideoCollection | null;
 }
 
 export type Codec = "avc" | "hevc" | "av1";
@@ -179,6 +212,18 @@ export interface DownloadTask {
   embedSubtitles: boolean;
   /** 实际内嵌的字幕轨道数（0 表示未内嵌） */
   subtitleCount: number;
+  /** 列表（合集/分P批量）名称；非空时文件保存到以该名称命名的子文件夹 */
+  listTitle: string | null;
+  /** 列表中的序号（分P页码或合集剧集序号，从 1 开始） */
+  listIndex: number | null;
+  /** 是否把弹幕内嵌为视频的 ASS 软字幕轨道（输出 MKV） */
+  embedDanmaku: boolean;
+  /** 是否把弹幕文件（XML + ASS）单独保存到「弹幕」子文件夹 */
+  saveDanmaku: boolean;
+  /** 实际获取到的弹幕条数（0 表示没有弹幕/未获取） */
+  danmakuCount: number;
+  /** 单独保存弹幕时的弹幕文件夹绝对路径 */
+  danmakuPath: string | null;
 }
 
 export interface CreateTaskInput {
@@ -196,6 +241,14 @@ export interface CreateTaskInput {
   sourceUrl: string;
   /** 可选：是否把字幕内嵌为 MKV，缺省使用设置项 embedSubtitles */
   embedSubtitles?: boolean;
+  /** 可选：列表名称（合集标题 / 分P所属视频标题），用于创建列表文件夹 */
+  listTitle?: string | null;
+  /** 可选：列表序号（分P页码 / 合集剧集序号） */
+  listIndex?: number | null;
+  /** 可选：是否内嵌弹幕，缺省使用设置项 embedDanmaku */
+  embedDanmaku?: boolean;
+  /** 可选：是否单独保存弹幕文件，缺省使用设置项 saveDanmaku */
+  saveDanmaku?: boolean;
 }
 
 export type TaskAction = "pause" | "resume" | "cancel" | "retry" | "delete";
@@ -221,6 +274,16 @@ export interface AppSettings {
   downloadThreads: number;
   /** 默认是否拉取字幕并内嵌为 MKV（需要 ffmpeg） */
   embedSubtitles: boolean;
+  /** 列表（合集/分P批量）下载时按列表名创建子文件夹 */
+  listFolder: boolean;
+  /** 默认是否把弹幕内嵌为 MKV 的 ASS 软字幕轨道（需要 ffmpeg） */
+  embedDanmaku: boolean;
+  /** 默认是否把弹幕文件（XML + ASS）单独保存到「弹幕」子文件夹 */
+  saveDanmaku: boolean;
+  /** ASS 弹幕字号（PlayRes 1920x1080 坐标系） */
+  danmakuFontSize: number;
+  /** 弹幕不透明度（0.1 ~ 1） */
+  danmakuOpacity: number;
 }
 
 export type PublicSettings = Omit<AppSettings, "cookie"> & {

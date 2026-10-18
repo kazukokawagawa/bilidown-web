@@ -18,9 +18,12 @@ import { Switch } from "@/components/ui/switch";
 import { useDesktopBridge, useIsDesktop } from "@/hooks/use-desktop";
 import {
   CODEC_NAMES,
+  DANMAKU_OPACITY_OPTIONS,
   DEFAULT_QUALITIES,
   DOWNLOAD_THREAD_OPTIONS,
   LOGIN_REQUIRED_QN,
+  MAX_DANMAKU_FONT_SIZE,
+  MIN_DANMAKU_FONT_SIZE,
   QUALITY_LABELS,
 } from "@/lib/constants";
 import type { Codec, SystemInfo } from "@/lib/types";
@@ -34,10 +37,18 @@ interface DownloadSettingsCardProps {
   systemLoading: boolean;
 }
 
+/** 弹幕字号限制在 MIN/MAX 之间并取整，非法输入回退到最小值。 */
+function clampDanmakuFontSize(value: number): number {
+  if (!Number.isFinite(value)) return MIN_DANMAKU_FONT_SIZE;
+  return Math.min(MAX_DANMAKU_FONT_SIZE, Math.max(MIN_DANMAKU_FONT_SIZE, Math.round(value)));
+}
+
 export function DownloadSettingsCard({ form, onChange, systemInfo, systemLoading }: DownloadSettingsCardProps) {
   const ffmpeg = systemInfo ? systemInfo.ffmpeg : null;
   const isDesktop = useIsDesktop();
   const desktopBridge = useDesktopBridge();
+  // 内嵌字幕或内嵌弹幕都会输出 MKV
+  const outputExtension = form.embedSubtitles || form.embedDanmaku ? "mkv" : "mp4";
 
   async function handleBrowseDirectory() {
     if (!desktopBridge) return;
@@ -133,7 +144,7 @@ export function DownloadSettingsCard({ form, onChange, systemInfo, systemLoading
           <div className="rounded-md bg-muted/50 px-3 py-2 text-xs">
             <span className="text-muted-foreground">文件名预览：</span>
             <span className="break-all font-medium">
-              {renderNamingTemplate(form.namingTemplate)}.{form.embedSubtitles ? "mkv" : "mp4"}
+              {renderNamingTemplate(form.namingTemplate)}.{outputExtension}
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -264,6 +275,108 @@ export function DownloadSettingsCard({ form, onChange, systemInfo, systemLoading
             checked={form.embedSubtitles}
             onCheckedChange={(checked) => onChange("embedSubtitles", checked)}
           />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="listFolder" className="cursor-pointer">
+              列表下载单独文件夹
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              下载分P/合集列表时，按列表名创建子文件夹集中存放全部文件。
+            </p>
+          </div>
+          <Switch
+            id="listFolder"
+            checked={form.listFolder}
+            onCheckedChange={(checked) => onChange("listFolder", checked)}
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="embedDanmaku" className="cursor-pointer">
+              内嵌弹幕（输出 MKV）
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              拉取 B 站弹幕并转为 ASS 软字幕封装进 MKV，需要 ffmpeg；没有弹幕/未检测到 ffmpeg 时自动回退。
+            </p>
+            {systemInfo && !ffmpeg?.available ? (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                当前未检测到 ffmpeg，内嵌弹幕不会生效，将回退为 MP4。
+              </p>
+            ) : null}
+          </div>
+          <Switch
+            id="embedDanmaku"
+            checked={form.embedDanmaku}
+            onCheckedChange={(checked) => onChange("embedDanmaku", checked)}
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="saveDanmaku" className="cursor-pointer">
+              单独保存弹幕文件
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              把弹幕 XML 与 ASS 保存到视频同目录的「弹幕」子文件夹。
+            </p>
+          </div>
+          <Switch
+            id="saveDanmaku"
+            checked={form.saveDanmaku}
+            onCheckedChange={(checked) => onChange("saveDanmaku", checked)}
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="danmakuFontSize" className="cursor-pointer">
+              弹幕字号
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              内嵌/保存的 ASS 弹幕字号（{MIN_DANMAKU_FONT_SIZE}-{MAX_DANMAKU_FONT_SIZE}），数值越大弹幕越大。
+            </p>
+          </div>
+          <Input
+            id="danmakuFontSize"
+            type="number"
+            min={MIN_DANMAKU_FONT_SIZE}
+            max={MAX_DANMAKU_FONT_SIZE}
+            step={5}
+            value={form.danmakuFontSize}
+            onChange={(event) =>
+              onChange("danmakuFontSize", clampDanmakuFontSize(Number(event.target.value)))
+            }
+            className="w-24 shrink-0 text-center"
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="danmakuOpacity" className="cursor-pointer">
+              弹幕不透明度
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              内嵌/保存的 ASS 弹幕不透明度，100% 为完全不透明。
+            </p>
+          </div>
+          <Select
+            value={String(form.danmakuOpacity)}
+            onValueChange={(value) => onChange("danmakuOpacity", Number(value))}
+          >
+            <SelectTrigger id="danmakuOpacity" className="w-28 shrink-0">
+              <SelectValue placeholder="选择不透明度" />
+            </SelectTrigger>
+            <SelectContent>
+              {DANMAKU_OPACITY_OPTIONS.map((value) => (
+                <SelectItem key={value} value={String(value)}>
+                  {Math.round(value * 100)}%
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">

@@ -19,6 +19,11 @@ export type SettingsFormState = Pick<
   | "deleteTempAfterMerge"
   | "downloadThreads"
   | "embedSubtitles"
+  | "listFolder"
+  | "embedDanmaku"
+  | "saveDanmaku"
+  | "danmakuFontSize"
+  | "danmakuOpacity"
 >;
 
 export function toSettingsForm(settings: AppSettings | PublicSettings): SettingsFormState {
@@ -38,6 +43,11 @@ export function toSettingsForm(settings: AppSettings | PublicSettings): Settings
     deleteTempAfterMerge: settings.deleteTempAfterMerge,
     downloadThreads: settings.downloadThreads,
     embedSubtitles: settings.embedSubtitles,
+    listFolder: settings.listFolder,
+    embedDanmaku: settings.embedDanmaku,
+    saveDanmaku: settings.saveDanmaku,
+    danmakuFontSize: settings.danmakuFontSize,
+    danmakuOpacity: settings.danmakuOpacity,
   };
 }
 
