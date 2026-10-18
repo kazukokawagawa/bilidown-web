@@ -8,13 +8,14 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build && node scripts/prepare-standalone.mjs",
-    "start": "next start",
+    "start": "node scripts/start-standalone.mjs",
     "lint": "eslint",
     "electron:dev": "concurrently -k -n NEXT,ELECTRON -c cyan,magenta \"next dev -p 3100\" \"wait-on http://127.0.0.1:3100 && electron .\"",
     "electron:start": "cross-env BILIDOWN_EMBEDDED=1 electron .",
     "electron:smoke": "cross-env BILIDOWN_EMBEDDED=1 electron . --smoke-test",
     "electron:pack": "npm run build && electron-builder --dir",
-    "electron:build": "npm run build && electron-builder --win portable"
+    "electron:build": "npm run build && electron-builder --win portable",
+    "start:standalone": "node scripts/start-standalone.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
@@ -60,6 +61,10 @@
       {
         "from": ".next/standalone",
         "to": "app"
+      },
+      {
+        "from": ".next/standalone/node_modules",
+        "to": "app/node_modules"
       }
     ],
     "win": {

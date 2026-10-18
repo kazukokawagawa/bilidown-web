@@ -39,7 +39,7 @@ cd bilidown-web
 npm install
 npm run dev          # 开发模式，默认 http://localhost:3000
 npm run build        # 生产构建
-npm run start        # 生产启动（默认 3000，可用 -- -p 3100 指定端口）
+npm run start        # 生产启动（standalone 启动器，默认 3000；可用 -- --port 3100 指定端口）
 ```
 
 启动后在浏览器打开对应地址即可。首页粘贴 B 站视频链接/BV/av 号/b23 短链/番剧 ep、ss 即可解析下载。
