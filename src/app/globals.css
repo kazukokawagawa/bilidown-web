@@ -160,3 +160,410 @@
     scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
   }
 }
+
+/* ==========================================================================
+   界面动效系统（motion system）
+   --------------------------------------------------------------------------
+   · 只动 transform / opacity / filter / background-position，避免触发布局重排；
+   · 入场动画统一 fill-mode: backwards：动画结束后回到自然样式，
+     元素自身仍可叠加 hover-lift 等 transition 而不被最终关键帧锁住 transform；
+   · 用户开启「减少动态效果」（prefers-reduced-motion: reduce）时整体关闭；
+   · 列表错峰用 inline style 的 animationDelay，不额外包 DOM。
+   ========================================================================== */
+
+@keyframes bd-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes bd-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bd-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bd-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bd-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translate3d(-18px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes bd-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translate3d(18px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes bd-blur-in {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes bd-page-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bd-sheen {
+  from {
+    transform: translateX(-130%) skewX(-12deg);
+  }
+  to {
+    transform: translateX(230%) skewX(-12deg);
+  }
+}
+
+@keyframes bd-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  75%,
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+
+@keyframes bd-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+@keyframes bd-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-7deg);
+  }
+  75% {
+    transform: rotate(7deg);
+  }
+}
+
+@keyframes bd-skeleton-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes bd-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 32px 0;
+  }
+}
+
+@keyframes bd-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+/* 阴影变量：hover-lift 使用，深浅色分别取值 */
+:root {
+  --lift-shadow:
+    0 20px 42px -30px rgb(0 0 0 / 42%), 0 3px 10px -6px rgb(0 0 0 / 10%);
+  --lift-shadow-strong:
+    0 26px 56px -34px rgb(0 0 0 / 52%), 0 4px 14px -8px rgb(0 0 0 / 14%);
+}
+
+.dark {
+  --lift-shadow:
+    0 20px 46px -26px rgb(0 0 0 / 90%), 0 2px 10px -6px rgb(0 0 0 / 55%);
+  --lift-shadow-strong:
+    0 28px 60px -28px rgb(0 0 0 / 95%), 0 4px 16px -8px rgb(0 0 0 / 65%);
+}
+
+/* ---- 入场动画（fill-mode: backwards，结束后不锁定 transform） ---- */
+.anim-fade-up {
+  animation: bd-fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.anim-fade-in {
+  animation: bd-fade-in 0.4s ease backwards;
+}
+.anim-pop-in {
+  animation: bd-pop-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+.anim-scale-in {
+  animation: bd-scale-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.anim-slide-in-left {
+  animation: bd-slide-in-left 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.anim-slide-in-right {
+  animation: bd-slide-in-right 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.anim-blur-in {
+  animation: bd-blur-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.anim-shake {
+  animation: bd-shake 0.4s ease backwards;
+}
+
+/* 路由切换时由 app/template.tsx 触发的页面入场：只做淡入，
+   位移交给各页面自己的 anim-fade-up，避免整页与内容「动两次」 */
+.page-enter {
+  animation: bd-page-in 0.32s ease backwards;
+}
+
+/* ---- 悬停 / 按压 / 扫光 ---- */
+.hover-lift {
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
+}
+.hover-lift:hover {
+  box-shadow: var(--lift-shadow);
+  transform: translateY(-3px);
+}
+/* 更明显的上浮：自带 transition，可单独使用 */
+.hover-lift-strong {
+  transition:
+    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.32s ease,
+    border-color 0.3s ease;
+}
+.hover-lift-strong:hover {
+  box-shadow: var(--lift-shadow-strong);
+  transform: translateY(-4px);
+}
+
+.pressable {
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.pressable:active {
+  transform: scale(0.96);
+}
+
+.btn-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.btn-sheen::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 25%,
+    color-mix(in oklab, var(--primary-foreground) 28%, transparent) 50%,
+    transparent 75%
+  );
+  transform: translateX(-130%) skewX(-12deg);
+}
+.btn-sheen:hover::after {
+  animation: bd-sheen 0.85s ease;
+}
+
+/* ---- 状态 / 装饰 ---- */
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: currentColor;
+}
+.live-dot::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+  background: currentColor;
+  animation: bd-ping 1.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.float-soft {
+  animation: bd-float 5.5s ease-in-out infinite;
+}
+
+.group:hover .wiggle-on-hover {
+  animation: bd-wiggle 0.5s ease-in-out;
+}
+
+/* ---- 骨架屏：用扫光代替呼吸闪烁，观感更细腻 ---- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: color-mix(in oklab, var(--foreground) 7%, transparent);
+}
+.dark .skeleton {
+  background-color: color-mix(in oklab, var(--foreground) 11%, transparent);
+}
+.skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  transform: translateX(-100%);
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in oklab, var(--foreground) 9%, transparent) 50%,
+    transparent 80%
+  );
+  animation: bd-skeleton-sweep 1.7s ease-in-out infinite;
+}
+
+/* ---- 进度条：下载中的条纹流动 ---- */
+.progress-active {
+  background-image: linear-gradient(
+    115deg,
+    color-mix(in oklab, var(--primary-foreground) 26%, transparent) 25%,
+    transparent 25%,
+    transparent 50%,
+    color-mix(in oklab, var(--primary-foreground) 26%, transparent) 50%,
+    color-mix(in oklab, var(--primary-foreground) 26%, transparent) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 32px 100%;
+  animation: bd-stripes 0.9s linear infinite;
+}
+
+/* ---- 勾选框：选中时对勾弹一下 ---- */
+[data-slot="checkbox"][data-state="checked"] [data-slot="checkbox-indicator"] {
+  animation: bd-pop-in 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---- 侧边栏滑动高亮（由 app-sidebar.tsx 测量位置后驱动） ---- */
+.sidebar-nav-indicator {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  border-radius: 0.5rem;
+  background: var(--secondary);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 7%, transparent);
+  transition:
+    transform 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.25s ease;
+}
+
+/* ---- 主题切换：View Transition 圆形揭示（theme-toggle.tsx 驱动） ---- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ---- 减少动态效果：统一关闭所有装饰性动画 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .anim-fade-up,
+  .anim-fade-in,
+  .anim-pop-in,
+  .anim-scale-in,
+  .anim-slide-in-left,
+  .anim-slide-in-right,
+  .anim-blur-in,
+  .anim-shake,
+  .page-enter,
+  .float-soft,
+  .skeleton::after,
+  .live-dot::after,
+  .progress-active,
+  .group:hover .wiggle-on-hover,
+  [data-slot="checkbox"][data-state="checked"] [data-slot="checkbox-indicator"] {
+    animation: none !important;
+  }
+  .hover-lift,
+  .hover-lift:hover,
+  .hover-lift-strong,
+  .hover-lift-strong:hover,
+  .pressable,
+  .pressable:active {
+    transform: none !important;
+    transition: none !important;
+  }
+  .btn-sheen::after {
+    display: none;
+  }
+  .sidebar-nav-indicator {
+    transition: none !important;
+  }
+}

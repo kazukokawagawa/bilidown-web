@@ -1,5 +1,8 @@
+"use client";
+
 import type { LucideIcon } from "lucide-react";
 import { CircleCheck, CircleX, Download, ListChecks } from "lucide-react";
+import { AnimatedNumber, revealDelay } from "@/components/shared/motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -27,18 +30,29 @@ export function TaskStats({ total, active, completed, failed }: TaskStatsProps) 
 
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {items.map((item) => {
+      {items.map((item, index) => {
         const Icon = item.icon;
         return (
-          <Card key={item.label} className="py-0">
-            <CardContent className="flex items-center justify-between gap-2 p-4">
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">{item.label}</p>
-                <p className="text-2xl font-semibold tabular-nums">{item.value}</p>
-              </div>
-              <Icon className={cn("h-8 w-8 opacity-80", item.className)} />
-            </CardContent>
-          </Card>
+          // 入场放 wrapper、hover 放卡片：两层职责分离，
+          // 入场动画进行中也不会与 hover 的位移/图标动效互相覆盖。
+          <div key={item.label} className="anim-fade-up h-full" style={revealDelay(index)}>
+            <Card className="group hover-lift h-full py-0">
+              <CardContent className="flex items-center justify-between gap-2 p-4">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">{item.label}</p>
+                  <p className="text-2xl font-semibold tabular-nums">
+                    <AnimatedNumber value={item.value} />
+                  </p>
+                </div>
+                <Icon
+                  className={cn(
+                    "h-8 w-8 opacity-80 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3",
+                    item.className,
+                  )}
+                />
+              </CardContent>
+            </Card>
+          </div>
         );
       })}
     </div>

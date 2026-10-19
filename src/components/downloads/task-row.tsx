@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { FadeInImage } from "@/components/shared/motion";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { api, getErrorMessage } from "@/lib/api-client";
 import { getDesktopBridge } from "@/lib/desktop";
@@ -207,16 +208,15 @@ export function TaskRow({ task, busy, browserFfmpegAvailable, browserFfmpegBytes
   }
 
   return (
-    <Card className="overflow-hidden py-0">
+    <Card className="hover-lift overflow-hidden py-0">
       <div className="flex flex-col gap-3 p-4">
         {/* 信息区：封面 + 标题 / 元信息 / 标签。操作按钮单独放到底部工具栏，
             避免按钮把正文挤成一条窄缝（窄窗口下标题被截断、标签逐行换行）。 */}
         <div className="flex items-start gap-3">
           <div className="relative hidden h-[72px] w-24 shrink-0 overflow-hidden rounded-md border bg-muted sm:block">
             {task.cover ? (
-              // B 站图片需要 no-referrer，否则会被防盗链拦截
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              // B 站图片需要 no-referrer，否则会被防盗链拦截；加载完成后由 FadeInImage 淡入
+              <FadeInImage
                 src={task.cover}
                 alt={task.title}
                 referrerPolicy="no-referrer"
@@ -262,7 +262,12 @@ export function TaskRow({ task, busy, browserFfmpegAvailable, browserFfmpegBytes
           </div>
         </div>
 
-        <Progress value={percent} className="h-1.5" />
+        <Progress
+          value={percent}
+          className="h-1.5"
+          animated={task.status === "downloading" || task.status === "merging"}
+          indicatorClassName={task.status === "completed" ? "bg-emerald-500" : undefined}
+        />
 
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span className="min-w-0 truncate">{statusDetail(task)}</span>
@@ -281,7 +286,7 @@ export function TaskRow({ task, busy, browserFfmpegAvailable, browserFfmpegBytes
         </div>
 
         {task.status === "error" && task.error ? (
-          <p className="rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive">{task.error}</p>
+          <p className="anim-shake rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive">{task.error}</p>
         ) : null}
         {task.status === "completed" && task.error ? (
           // 已完成任务也可能带告警（如字幕内嵌失败），用琥珀色与失败状态区分。

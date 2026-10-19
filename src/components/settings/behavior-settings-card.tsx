@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -8,6 +9,9 @@ import type { SettingsFormState } from "./settings-form";
 interface BehaviorSettingsCardProps {
   form: SettingsFormState;
   onChange: <K extends keyof SettingsFormState>(key: K, value: SettingsFormState[K]) => void;
+  /** 动效：设置页错峰入场时由父级传入 anim-fade-up / revealDelay 的 style（可选） */
+  className?: string;
+  style?: CSSProperties;
 }
 
 interface SwitchRowProps {
@@ -32,9 +36,9 @@ function SwitchRow({ id, label, description, checked, onCheckedChange }: SwitchR
   );
 }
 
-export function BehaviorSettingsCard({ form, onChange }: BehaviorSettingsCardProps) {
+export function BehaviorSettingsCard({ form, onChange, className, style }: BehaviorSettingsCardProps) {
   return (
-    <Card>
+    <Card className={className} style={style}>
       <CardHeader>
         <CardTitle>行为</CardTitle>
         <CardDescription>剪贴板监听、更新检查与任务历史策略</CardDescription>

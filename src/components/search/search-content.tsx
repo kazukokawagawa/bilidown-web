@@ -129,7 +129,7 @@ export function SearchContent() {
           description="换个关键词，或切换视频 / UP主 分类再试试。"
         />
       ) : (
-        <section className="space-y-4">
+        <section key={type + "-" + String(page) + "-" + keyword} className="anim-fade-up space-y-4">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>{total > 0 ? "共 " + formatCount(total) + " 个结果" : "搜索结果"}</span>
             <span>第 {page} 页</span>
@@ -137,14 +137,14 @@ export function SearchContent() {
 
           {type === "video" ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {videoItems.map((item) => (
-                <VideoResultCard key={item.bvid} item={item} />
+              {videoItems.map((item, index) => (
+                <VideoResultCard key={item.bvid} item={item} index={index} />
               ))}
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
-              {userItems.map((item) => (
-                <UserResultCard key={item.mid} item={item} />
+              {userItems.map((item, index) => (
+                <UserResultCard key={item.mid} item={item} index={index} />
               ))}
             </div>
           )}

@@ -4,6 +4,7 @@ import { ListVideo } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { revealDelay } from "@/components/shared/motion";
 import { formatDuration } from "@/lib/format";
 import type { CollectionEpisode, CollectionSection } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -83,7 +84,7 @@ export function CollectionList({
               {isBangumi ? "剧集列表" : "合集列表"}（{total}）
             </CardTitle>
             {/* 全选控件固定不换行，单独占一行右侧，避免「已选 1 /」被拆行 */}
-            <div className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-2.5 py-1.5">
+            <div className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-2.5 py-1.5 transition-colors duration-200 hover:border-primary/30 hover:bg-muted/70">
               <Checkbox
                 id="select-all-collection"
                 checked={allSelected}
@@ -141,10 +142,11 @@ export function CollectionList({
                       }
                     }}
                     className={cn(
-                      "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted/50",
+                      "anim-fade-up flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-[background-color,border-color,translate] duration-200 ease-out hover:translate-x-0.5 hover:bg-muted/50",
                       checked ? "border-primary/60 bg-primary/5" : "",
                       disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
                     )}
+                    style={revealDelay(index - 1, 35, 10)}
                   >
                     <span onClick={(event) => event.stopPropagation()}>
                       <Checkbox

@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useQrLogin } from "@/hooks/use-account";
+import { FadeInImage } from "@/components/shared/motion";
 import { cn } from "@/lib/utils";
 
 interface LoginDialogProps {
@@ -52,18 +53,17 @@ export function LoginDialog({ open, onOpenChange, onLoggedIn }: LoginDialogProps
         </DialogHeader>
 
         <div className="flex flex-col items-center gap-3 py-2">
-          <div className="flex h-56 w-56 items-center justify-center rounded-xl border bg-muted/30 p-2">
+          <div className="anim-scale-in flex h-56 w-56 items-center justify-center rounded-xl border bg-muted/30 p-2">
             {status === "loading" ? (
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             ) : status === "confirmed" ? (
               <div className="text-center">
-                <CircleCheck className="mx-auto h-10 w-10 text-emerald-500" />
+                <CircleCheck className="anim-pop-in mx-auto h-10 w-10 text-emerald-500" />
                 <p className="mt-2 text-sm font-medium">登录成功</p>
               </div>
             ) : image ? (
-              // 二维码为服务端返回的 data:image/png;base64 图片
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              // 二维码为服务端返回的 data:image/png;base64 图片，加载完成后淡入
+              <FadeInImage
                 src={image}
                 alt="B站登录二维码"
                 referrerPolicy="no-referrer"
@@ -78,8 +78,9 @@ export function LoginDialog({ open, onOpenChange, onLoggedIn }: LoginDialogProps
           </div>
 
           <p
+            key={status}
             className={cn(
-              "text-center text-sm",
+              "anim-fade-in flex items-center justify-center gap-1.5 text-center text-sm",
               status === "scanned" || status === "confirmed"
                 ? "text-emerald-600 dark:text-emerald-400"
                 : status === "error"
@@ -87,10 +88,13 @@ export function LoginDialog({ open, onOpenChange, onLoggedIn }: LoginDialogProps
                   : "text-muted-foreground",
             )}
           >
-            {statusText}
+            {status === "waiting" ? (
+              <span className="live-dot shrink-0" aria-hidden="true" />
+            ) : null}
+            <span>{statusText}</span>
           </p>
           {status === "waiting" || status === "scanned" ? (
-            <p className="text-xs text-muted-foreground">二维码 3 分钟内有效，请及时扫码</p>
+            <p className="anim-fade-in text-xs text-muted-foreground">二维码 3 分钟内有效，请及时扫码</p>
           ) : null}
         </div>
 

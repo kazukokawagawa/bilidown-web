@@ -134,10 +134,10 @@ export function HomeContent() {
       {parsing && !video ? (
         <ParseResultSkeleton />
       ) : video ? (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
+        <div className="anim-fade-up grid gap-6 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
           {/* 左栏用 flex 纵向排列：视频卡固定高度，列表卡在 lg 下拉满剩余高度，
               避免右栏（下载选项 + 开始下载）更高时左下方留出大片空白。 */}
-          <div className="flex min-w-0 flex-col gap-6">
+          <div className="anim-fade-up flex min-w-0 flex-col gap-6" style={{ animationDelay: "60ms" }}>
             <div className="shrink-0">
               <VideoCard
                 video={video}
@@ -170,7 +170,7 @@ export function HomeContent() {
               />
             ) : null}
           </div>
-          <div className="min-w-0 space-y-6">
+          <div className="anim-fade-up min-w-0 space-y-6" style={{ animationDelay: "150ms" }}>
             <QualitySelector
               qualities={qualityChoices}
               codecChoices={codecChoices}

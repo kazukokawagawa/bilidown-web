@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import type { LucideIcon } from "lucide-react";
@@ -7,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { FadeInImage, revealDelay } from "@/components/shared/motion";
 import { formatCount, formatDuration, formatUnixDate, stripHtml } from "@/lib/format";
 import type { InputType, ParsedInput, VideoInfo, VideoPage } from "@/lib/types";
 
@@ -23,11 +23,16 @@ interface StatItemProps {
   icon: LucideIcon;
   label: string;
   value: number;
+  /** 统计项错峰入场的序号 */
+  index: number;
 }
 
-function StatItem({ icon: Icon, label, value }: StatItemProps) {
+function StatItem({ icon: Icon, label, value, index }: StatItemProps) {
   return (
-    <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-xs">
+    <div
+      className="anim-fade-up flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-xs"
+      style={revealDelay(index, 40, 10)}
+    >
       <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}</span>
       <span className="ml-auto whitespace-nowrap font-medium">{formatCount(value)}</span>
@@ -73,16 +78,16 @@ export function VideoCard({ video, parsed, selectedPages, selectedEpisodesCount 
       : video.redirectUrl || "https://www.bilibili.com/video/" + video.bvid;
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="hover-lift hover-lift-strong overflow-hidden">
       <CardContent className="grid gap-4 p-4 sm:grid-cols-[240px_minmax(0,1fr)]">
-        <div className="relative aspect-video overflow-hidden rounded-lg border bg-muted">
+        <div className="group relative aspect-video overflow-hidden rounded-lg border bg-muted">
           {video.cover ? (
-            <img
+            <FadeInImage
               src={video.cover}
               alt={title}
               referrerPolicy="no-referrer"
               loading="lazy"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover transition-[opacity,transform,filter,scale] duration-500 group-hover:scale-105"
             />
           ) : null}
           <Badge variant="secondary" className="absolute right-2 bottom-2 bg-black/70 font-normal text-white">
@@ -125,10 +130,10 @@ export function VideoCard({ video, parsed, selectedPages, selectedEpisodesCount 
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <StatItem icon={Play} label="播放" value={video.stat.view} />
-            <StatItem icon={ThumbsUp} label="点赞" value={video.stat.like} />
-            <StatItem icon={Star} label="收藏" value={video.stat.favorite} />
-            <StatItem icon={MessageSquare} label="弹幕" value={video.stat.danmaku} />
+            <StatItem icon={Play} label="播放" value={video.stat.view} index={0} />
+            <StatItem icon={ThumbsUp} label="点赞" value={video.stat.like} index={1} />
+            <StatItem icon={Star} label="收藏" value={video.stat.favorite} index={2} />
+            <StatItem icon={MessageSquare} label="弹幕" value={video.stat.danmaku} index={3} />
           </div>
 
           <p className="line-clamp-3 text-sm text-muted-foreground">{desc || "暂无简介"}</p>
@@ -137,10 +142,10 @@ export function VideoCard({ video, parsed, selectedPages, selectedEpisodesCount 
             <span className="max-w-full truncate text-xs text-muted-foreground">
               {selectionText(selectedPages, selectedEpisodesCount, isBangumi ? "剧集" : "合集")}
             </span>
-            <Button variant="link" size="sm" asChild className="h-auto px-0 text-xs">
+            <Button variant="link" size="sm" asChild className="group h-auto px-0 text-xs">
               <a href={externalUrl} target="_blank" rel="noopener noreferrer">
                 在 B 站打开
-                <ExternalLink className="h-3.5 w-3.5" />
+                <ExternalLink className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
               </a>
             </Button>
           </div>

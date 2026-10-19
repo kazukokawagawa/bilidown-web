@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { CircleCheck, CircleX, Loader2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,9 @@ interface SystemInfoCardProps {
   error: string | null;
   onReload: () => void;
   reloading: boolean;
+  /** 动效：设置页错峰入场时由父级传入 anim-fade-up / revealDelay 的 style（可选） */
+  className?: string;
+  style?: CSSProperties;
 }
 
 function platformLabel(platform: string): string {
@@ -31,9 +34,17 @@ function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-export function SystemInfoCard({ info, loading, error, onReload, reloading }: SystemInfoCardProps) {
+export function SystemInfoCard({
+  info,
+  loading,
+  error,
+  onReload,
+  reloading,
+  className,
+  style,
+}: SystemInfoCardProps) {
   return (
-    <Card>
+    <Card className={className} style={style}>
       <CardHeader className="flex-row items-start justify-between gap-3">
         <div className="space-y-1">
           <CardTitle>系统信息</CardTitle>

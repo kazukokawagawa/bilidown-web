@@ -36,14 +36,14 @@ export function SearchBar({ defaultValue, loading, onSubmit }: SearchBarProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex gap-2">
-      <div className="relative flex-1">
-        <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="group relative flex-1">
+        <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-transform duration-200 group-focus-within:scale-110 group-focus-within:text-foreground" />
         <Input
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="搜索视频、UP主"
           aria-label="搜索关键词"
-          className="h-11 pl-9"
+          className="h-11 pl-9 transition-[color,box-shadow,border-color] duration-200"
           autoComplete="off"
           spellCheck={false}
         />

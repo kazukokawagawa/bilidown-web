@@ -17,10 +17,11 @@ export function SearchPagination({ page, hasMore, loading, onPageChange }: Searc
         type="button"
         variant="outline"
         size="sm"
+        className="group"
         disabled={page <= 1 || loading}
         onClick={() => onPageChange(page - 1)}
       >
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
         上一页
       </Button>
       <span className="text-sm text-muted-foreground">第 {page} 页</span>
@@ -28,11 +29,12 @@ export function SearchPagination({ page, hasMore, loading, onPageChange }: Searc
         type="button"
         variant="outline"
         size="sm"
+        className="group"
         disabled={!hasMore || loading}
         onClick={() => onPageChange(page + 1)}
       >
         下一页
-        <ChevronRight className="h-4 w-4" />
+        <ChevronRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
       </Button>
     </div>
   );

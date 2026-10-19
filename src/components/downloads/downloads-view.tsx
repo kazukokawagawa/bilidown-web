@@ -6,6 +6,7 @@ import { AlertTriangle, DownloadCloud, FolderOpen, RefreshCw } from "lucide-reac
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ListSkeleton } from "@/components/shared/loading";
+import { revealDelay } from "@/components/shared/motion";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -116,9 +117,9 @@ export function DownloadsView() {
               }
             >
               <span
+                aria-hidden="true"
                 className={
-                  "mr-1.5 inline-block h-1.5 w-1.5 rounded-full " +
-                  (connected ? "bg-emerald-500" : "bg-amber-500")
+                  "live-dot mr-1.5 shrink-0 " + (connected ? "text-emerald-500" : "text-amber-500")
                 }
               />
               {connected ? "实时已连接" : "实时连接断开，重连中"}
@@ -137,8 +138,8 @@ export function DownloadsView() {
                 打开下载目录
               </Button>
             ) : null}
-            <Button variant="outline" size="sm" onClick={() => void refresh()}>
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="outline" size="sm" className="group" onClick={() => void refresh()}>
+              <RefreshCw className="h-4 w-4 transition-transform duration-300 group-hover:rotate-90" />
               刷新
             </Button>
           </>
@@ -153,7 +154,7 @@ export function DownloadsView() {
       />
 
       {showBrowserMergeHint ? (
-        <div className="mt-4 flex gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+        <div className="anim-fade-in mt-4 flex gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0 space-y-1">
             <p className="font-medium">
@@ -172,7 +173,7 @@ export function DownloadsView() {
       ) : null}
 
       {error ? (
-        <div className="mt-4 flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between">
+        <div className="anim-fade-in mt-4 flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between">
           <span>任务列表加载失败：{error}</span>
           <Button variant="outline" size="sm" onClick={() => void refresh()}>
             重试
@@ -222,16 +223,18 @@ export function DownloadsView() {
             }
           />
         ) : (
-          <div className="space-y-3">
-            {filtered.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                busy={busyId === task.id}
-                browserFfmpegAvailable={browserFfmpegAvailable}
-                browserFfmpegBytes={systemInfo ? systemInfo.browserFfmpeg.coreBytes : null}
-                onAction={(id, action) => void handleAction(id, action)}
-              />
+          <div key={tab} className="anim-fade-up space-y-3">
+            {filtered.map((task, index) => (
+              // 容器负责整组入场，行级 wrapper 负责错峰，卡片本身保留 hover-lift
+              <div key={task.id} className="anim-fade-up" style={revealDelay(index, 40, 10)}>
+                <TaskRow
+                  task={task}
+                  busy={busyId === task.id}
+                  browserFfmpegAvailable={browserFfmpegAvailable}
+                  browserFfmpegBytes={systemInfo ? systemInfo.browserFfmpeg.coreBytes : null}
+                  onAction={(id, action) => void handleAction(id, action)}
+                />
+              </div>
             ))}
           </div>
         )}

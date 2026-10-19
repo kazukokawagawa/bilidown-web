@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { Loader2, RotateCcw, Trash2 } from "lucide-react";
 import {
   AlertDialog,
@@ -14,17 +15,28 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 interface DangerZoneCardProps {
   resetting: boolean;
   clearing: boolean;
   onReset: () => void;
   onClearTasks: () => void;
+  /** 动效：设置页错峰入场时由父级传入 anim-fade-up / revealDelay 的 style（可选） */
+  className?: string;
+  style?: CSSProperties;
 }
 
-export function DangerZoneCard({ resetting, clearing, onReset, onClearTasks }: DangerZoneCardProps) {
+export function DangerZoneCard({
+  resetting,
+  clearing,
+  onReset,
+  onClearTasks,
+  className,
+  style,
+}: DangerZoneCardProps) {
   return (
-    <Card className="border-destructive/40">
+    <Card className={cn("border-destructive/40", className)} style={style}>
       <CardHeader>
         <CardTitle className="text-destructive">危险区</CardTitle>
         <CardDescription>以下操作不可撤销，请谨慎操作</CardDescription>

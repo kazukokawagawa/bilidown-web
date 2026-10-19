@@ -1,10 +1,10 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, DownloadCloud } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
+import { FadeInImage, revealDelay } from "@/components/shared/motion";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,10 +44,10 @@ export function RecentTasks() {
             <DownloadCloud className="h-4 w-4" />
             最近任务
           </CardTitle>
-          <Button variant="ghost" size="sm" asChild>
+          <Button variant="ghost" size="sm" asChild className="group">
             <Link href="/downloads">
               查看全部
-              <ArrowRight className="h-3.5 w-3.5" />
+              <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
             </Link>
           </Button>
         </div>
@@ -70,15 +70,19 @@ export function RecentTasks() {
           />
         ) : (
           <div className="divide-y">
-            {(tasks ?? []).map((task) => {
+            {(tasks ?? []).map((task, index) => {
               const quality = task.qualityName || (QUALITY_LABELS[task.qn] ?? "未知清晰度");
               const total = task.totalBytes || task.fileSize || 0;
               const percent = Math.min(100, Math.max(0, Math.round(task.progress)));
               return (
-                <div key={task.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                <div
+                  key={task.id}
+                  className="anim-fade-up flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+                  style={revealDelay(index, 40, 10)}
+                >
                   <div className="relative hidden h-14 w-24 shrink-0 overflow-hidden rounded-md border bg-muted sm:block">
                     {task.cover ? (
-                      <img
+                      <FadeInImage
                         src={task.cover}
                         alt={task.title}
                         referrerPolicy="no-referrer"
@@ -97,7 +101,11 @@ export function RecentTasks() {
                     <p className="truncate text-xs text-muted-foreground">
                       {task.partTitle} · {quality} · {formatBytes(total)}
                     </p>
-                    <Progress value={percent} className="h-1.5" />
+                    <Progress
+                      value={percent}
+                      animated={task.status === "downloading" || task.status === "merging"}
+                      className="h-1.5"
+                    />
                   </div>
                   <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{percent}%</span>
                 </div>

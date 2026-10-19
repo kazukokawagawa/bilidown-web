@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 interface ParseInputProps {
   value: string;
@@ -15,6 +16,9 @@ interface ParseInputProps {
 }
 
 export function ParseInput({ value, loading, onChange, onParse }: ParseInputProps) {
+  // btn-sheen 只挂在真正可点击的按钮上：加载中或输入为空时禁用态不扫光
+  const canParse = !loading && value.trim().length > 0;
+
   async function handlePaste() {
     if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
       toast.error("当前浏览器不支持读取剪贴板，请使用 Ctrl+V 粘贴");
@@ -43,10 +47,10 @@ export function ParseInput({ value, loading, onChange, onParse }: ParseInputProp
   }
 
   return (
-    <Card>
+    <Card className="hover-lift">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Search className="h-4 w-4" />
+        <CardTitle className="group flex items-center gap-2 text-base">
+          <Search className="wiggle-on-hover h-4 w-4" />
           解析视频
         </CardTitle>
         <CardDescription>支持 BV 号 / av 号 / 视频链接 / b23.tv 短链 / 番剧 ep、ss</CardDescription>
@@ -64,11 +68,17 @@ export function ParseInput({ value, loading, onChange, onParse }: ParseInputProp
             className="h-11 flex-1"
           />
           <div className="flex gap-2">
-            <Button type="button" variant="outline" className="h-11" onClick={handlePaste} disabled={loading}>
-              <ClipboardPaste className="h-4 w-4" />
+            <Button
+              type="button"
+              variant="outline"
+              className="group h-11"
+              onClick={handlePaste}
+              disabled={loading}
+            >
+              <ClipboardPaste className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
               粘贴
             </Button>
-            <Button type="submit" className="h-11" disabled={loading || !value.trim()}>
+            <Button type="submit" className={cn("h-11", canParse && "btn-sheen")} disabled={!canParse}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
               {loading ? "解析中…" : "解析"}
             </Button>

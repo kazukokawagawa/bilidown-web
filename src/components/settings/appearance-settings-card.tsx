@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,6 +15,9 @@ import type { SettingsFormState } from "./settings-form";
 interface AppearanceSettingsCardProps {
   form: SettingsFormState;
   onThemeChange: (theme: SettingsFormState["theme"]) => void;
+  /** 动效：设置页错峰入场时由父级传入 anim-fade-up / revealDelay 的 style（可选） */
+  className?: string;
+  style?: CSSProperties;
 }
 
 const THEME_OPTIONS: { value: SettingsFormState["theme"]; label: string }[] = [
@@ -22,9 +26,9 @@ const THEME_OPTIONS: { value: SettingsFormState["theme"]; label: string }[] = [
   { value: "system", label: "跟随系统" },
 ];
 
-export function AppearanceSettingsCard({ form, onThemeChange }: AppearanceSettingsCardProps) {
+export function AppearanceSettingsCard({ form, onThemeChange, className, style }: AppearanceSettingsCardProps) {
   return (
-    <Card>
+    <Card className={className} style={style}>
       <CardHeader>
         <CardTitle>外观</CardTitle>
         <CardDescription>主题会同时应用到当前浏览器并保存到服务端设置</CardDescription>

@@ -28,9 +28,9 @@ interface UserCardProps {
 
 export function UserCard({ user, refreshing, loggingOut, onRefresh, onLogout }: UserCardProps) {
   return (
-    <Card>
+    <Card className="anim-fade-up">
       <CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center">
-        <Avatar className="h-16 w-16 shrink-0">
+        <Avatar className="h-16 w-16 shrink-0 transition-[transform,box-shadow] duration-300 hover:scale-105 hover:ring-2 hover:ring-primary/30">
           <AvatarImage src={user.face} alt={user.name} referrerPolicy="no-referrer" />
           <AvatarFallback className="text-lg">{user.name.slice(0, 1)}</AvatarFallback>
         </Avatar>

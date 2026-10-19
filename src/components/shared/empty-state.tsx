@@ -18,12 +18,20 @@ export function EmptyState({ icon: Icon, title, description, action, className }
         className,
       )}
     >
-      {Icon ? <Icon className="h-10 w-10 text-muted-foreground/60" /> : null}
-      <div className="space-y-1">
+      {Icon ? (
+        <div className="anim-pop-in">
+          <Icon className="float-soft h-10 w-10 text-muted-foreground/60" />
+        </div>
+      ) : null}
+      <div className="anim-fade-up space-y-1" style={{ animationDelay: "70ms" }}>
         <p className="font-medium">{title}</p>
         {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
       </div>
-      {action ? <div className="pt-1">{action}</div> : null}
+      {action ? (
+        <div className="anim-fade-up pt-1" style={{ animationDelay: "130ms" }}>
+          {action}
+        </div>
+      ) : null}
     </div>
   );
 }

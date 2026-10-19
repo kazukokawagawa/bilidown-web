@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,11 +9,14 @@ import type { SettingsFormState } from "./settings-form";
 interface NetworkSettingsCardProps {
   form: SettingsFormState;
   onChange: <K extends keyof SettingsFormState>(key: K, value: SettingsFormState[K]) => void;
+  /** 动效：设置页错峰入场时由父级传入 anim-fade-up / revealDelay 的 style（可选） */
+  className?: string;
+  style?: CSSProperties;
 }
 
-export function NetworkSettingsCard({ form, onChange }: NetworkSettingsCardProps) {
+export function NetworkSettingsCard({ form, onChange, className, style }: NetworkSettingsCardProps) {
   return (
-    <Card>
+    <Card className={className} style={style}>
       <CardHeader>
         <CardTitle>网络</CardTitle>
         <CardDescription>服务端访问 B 站与下载视频时使用的代理</CardDescription>

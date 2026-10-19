@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { revealDelay } from "@/components/shared/motion";
 import { CODEC_NAMES, QUALITY_LABELS } from "@/lib/constants";
 import type { Codec, QualityOption } from "@/lib/types";
 
@@ -122,7 +123,10 @@ export function QualitySelector({
           </>
         )}
 
-        <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3">
+        <div
+          className="anim-fade-up flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3 transition-shadow duration-200 hover:shadow-sm"
+          style={revealDelay(0)}
+        >
           <div className="space-y-0.5">
             <Label htmlFor="audio-only" className="text-sm font-medium">
               仅下载音频
@@ -132,7 +136,10 @@ export function QualitySelector({
           <Switch id="audio-only" checked={audioOnly} onCheckedChange={onAudioOnlyChange} disabled={disabled || loading} />
         </div>
 
-        <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3">
+        <div
+          className="anim-fade-up flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3 transition-shadow duration-200 hover:shadow-sm"
+          style={revealDelay(1)}
+        >
           <div className="space-y-0.5">
             <Label htmlFor="embed-subtitles" className="text-sm font-medium">
               内嵌字幕（MKV）
@@ -149,7 +156,10 @@ export function QualitySelector({
           />
         </div>
 
-        <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3">
+        <div
+          className="anim-fade-up flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3 transition-shadow duration-200 hover:shadow-sm"
+          style={revealDelay(2)}
+        >
           <div className="space-y-0.5">
             <Label htmlFor="embed-danmaku" className="text-sm font-medium">
               内嵌弹幕（MKV 软字幕）
@@ -166,7 +176,10 @@ export function QualitySelector({
           />
         </div>
 
-        <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3">
+        <div
+          className="anim-fade-up flex items-start justify-between gap-4 rounded-lg border bg-muted/30 p-3 transition-shadow duration-200 hover:shadow-sm"
+          style={revealDelay(3)}
+        >
           <div className="space-y-0.5">
             <Label htmlFor="save-danmaku" className="text-sm font-medium">
               单独保存弹幕文件
@@ -198,7 +211,7 @@ export function QualitySelector({
         ) : null}
 
         {!isLogin ? (
-          <p className="rounded-md bg-muted/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+          <p className="anim-fade-in rounded-md bg-muted/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
             未登录时高清清晰度不可用。
             <Link href="/account" className="font-medium text-primary underline-offset-4 hover:underline">
               登录 B 站账号

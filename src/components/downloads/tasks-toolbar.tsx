@@ -76,18 +76,33 @@ export function TasksToolbar({ totalCount, completedCount, onChanged }: TasksToo
         className="hidden"
         onChange={(event) => void handleFileChange(event)}
       />
-      <Button variant="outline" size="sm" onClick={() => window.open(api.tasks.exportUrl, "_blank", "noopener,noreferrer")}>
-        <FileDown className="h-4 w-4" />
+      <Button
+        variant="outline"
+        size="sm"
+        className="group"
+        onClick={() => window.open(api.tasks.exportUrl, "_blank", "noopener,noreferrer")}
+      >
+        <FileDown className="h-4 w-4 transition-transform duration-300 group-hover:translate-y-0.5" />
         导出 JSON
       </Button>
-      <Button variant="outline" size="sm" disabled={busy} onClick={() => fileInputRef.current?.click()}>
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+      <Button
+        variant="outline"
+        size="sm"
+        className="group"
+        disabled={busy}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Upload className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5" />
+        )}
         导入 JSON
       </Button>
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant="outline" size="sm" disabled={busy || completedCount === 0}>
-            <ListChecks className="h-4 w-4" />
+          <Button variant="outline" size="sm" className="group" disabled={busy || completedCount === 0}>
+            <ListChecks className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
             清理已完成
           </Button>
         </AlertDialogTrigger>
@@ -106,8 +121,8 @@ export function TasksToolbar({ totalCount, completedCount, onChanged }: TasksToo
       </AlertDialog>
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant="destructive" size="sm" disabled={busy || totalCount === 0}>
-            <Trash2 className="h-4 w-4" />
+          <Button variant="destructive" size="sm" className="group" disabled={busy || totalCount === 0}>
+            <Trash2 className="h-4 w-4 transition-transform duration-300 group-hover:-rotate-12" />
             清空全部
           </Button>
         </AlertDialogTrigger>

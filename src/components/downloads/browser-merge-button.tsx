@@ -193,7 +193,9 @@ export function BrowserMergeButton({ task, available, coreBytes }: BrowserMergeB
         ) : (
           <Film className="h-4 w-4" />
         )}
-        <span className="max-w-40 truncate sm:max-w-none">{label}</span>
+        <span key={phase.kind} className="anim-fade-in max-w-40 truncate sm:max-w-none">
+          {label}
+        </span>
       </Button>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>

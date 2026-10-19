@@ -3,10 +3,11 @@
 import { ExternalLink } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
+import { revealDelay } from "@/components/shared/motion";
 import { formatCount, stripHtml } from "@/lib/format";
 import type { SearchUserItem } from "@/lib/types";
 
-export function UserResultCard({ item }: { item: SearchUserItem }) {
+export function UserResultCard({ item, index = 0 }: { item: SearchUserItem; index?: number }) {
   const name = stripHtml(item.name);
   const href = "https://space.bilibili.com/" + String(item.mid);
 
@@ -15,13 +16,19 @@ export function UserResultCard({ item }: { item: SearchUserItem }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group block h-full focus-visible:outline-none"
+      className="group anim-fade-up block h-full focus-visible:outline-none"
+      style={revealDelay(index, 40, 10)}
       title={"在新窗口打开 " + name + " 的 B 站空间"}
     >
-      <Card className="h-full gap-0 p-4 transition-shadow group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-ring">
+      <Card className="hover-lift h-full gap-0 p-4 group-focus-visible:ring-2 group-focus-visible:ring-ring">
         <div className="flex items-start gap-3">
           <Avatar className="h-14 w-14 shrink-0">
-            <AvatarImage src={item.face} alt={name} referrerPolicy="no-referrer" />
+            <AvatarImage
+              src={item.face}
+              alt={name}
+              referrerPolicy="no-referrer"
+              className="transition-transform duration-300 group-hover:scale-105"
+            />
             <AvatarFallback>{name.slice(0, 1)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1 space-y-1">

@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { CODEC_NAMES, QUALITY_LABELS } from "@/lib/constants";
 import { formatBytes } from "@/lib/format";
 import { collectSelectedItems, selectionKey } from "@/lib/selection";
+import { revealDelay } from "@/components/shared/motion";
+import { cn } from "@/lib/utils";
 import type { Codec, CollectionEpisode, StreamDetail, VideoInfo, VideoPage } from "@/lib/types";
 
 function playerUrl(bvid: string, page: number): string {
@@ -20,9 +22,12 @@ function playerUrl(bvid: string, page: number): string {
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function SummaryRow({ label, value, index }: { label: string; value: string; index: number }) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div
+      className="anim-fade-up flex items-center justify-between gap-3"
+      style={revealDelay(index, 35, 10)}
+    >
       <span className="shrink-0 text-muted-foreground">{label}</span>
       <span className="min-w-0 truncate text-right font-medium">{value}</span>
     </div>
@@ -164,25 +169,31 @@ export function DownloadPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
-          {pages.length > 0 ? <SummaryRow label="分P" value={pagesSummary(pages)} /> : null}
-          {episodes.length > 0 ? <SummaryRow label="合集" value={episodesSummary(episodes, collectionTitle ?? null)} /> : null}
-          <SummaryRow label="保存位置" value={saveLocation} />
-          {danmakuTexts.length > 0 ? <SummaryRow label="弹幕" value={danmakuTexts.join("；")} /> : null}
-          <SummaryRow label="清晰度" value={qualityName} />
-          <SummaryRow label="编码" value={audioOnly ? "仅音频" : codecName} />
-          <SummaryRow label="格式" value={formatText} />
-          <SummaryRow label={selectedCount > 1 ? "预计总大小" : "预计大小"} value={sizeText} />
+          {pages.length > 0 ? <SummaryRow label="分P" value={pagesSummary(pages)} index={0} /> : null}
+          {episodes.length > 0 ? <SummaryRow label="合集" value={episodesSummary(episodes, collectionTitle ?? null)} index={1} /> : null}
+          <SummaryRow label="保存位置" value={saveLocation} index={2} />
+          {danmakuTexts.length > 0 ? <SummaryRow label="弹幕" value={danmakuTexts.join("；")} index={3} /> : null}
+          <SummaryRow label="清晰度" value={qualityName} index={4} />
+          <SummaryRow label="编码" value={audioOnly ? "仅音频" : codecName} index={5} />
+          <SummaryRow label="格式" value={formatText} index={6} />
+          <SummaryRow label={selectedCount > 1 ? "预计总大小" : "预计大小"} value={sizeText} index={7} />
         </div>
 
-        <Button type="button" className="w-full" size="lg" onClick={onDownload} disabled={disabled || creating}>
+        <Button
+          type="button"
+          className={cn("w-full", !disabled && !creating && "btn-sheen")}
+          size="lg"
+          onClick={onDownload}
+          disabled={disabled || creating}
+        >
           {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           {creating ? "创建中…" : downloadLabel}
         </Button>
 
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
           <DialogTrigger asChild>
-            <Button type="button" variant="outline" className="w-full" size="lg">
-              <Play className="h-4 w-4" />
+            <Button type="button" variant="outline" className="group w-full" size="lg">
+              <Play className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />
               在线预览{pages.length > 1 ? "（首个分P）" : ""}
             </Button>
           </DialogTrigger>

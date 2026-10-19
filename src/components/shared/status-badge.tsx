@@ -13,9 +13,13 @@ const STATUS_CLASS: Record<TaskStatus, string> = {
   cancelled: "bg-muted text-muted-foreground",
 };
 
+/** 进行中的状态显示呼吸小圆点，让「正在下载/合并」一眼可见。 */
+const ACTIVE_STATUSES: TaskStatus[] = ["downloading", "merging"];
+
 export function StatusBadge({ status }: { status: TaskStatus }) {
   return (
     <Badge variant="secondary" className={cn("font-normal", STATUS_CLASS[status])}>
+      {ACTIVE_STATUSES.includes(status) ? <span className="live-dot" aria-hidden="true" /> : null}
       {TASK_STATUS_LABELS[status]}
     </Badge>
   );

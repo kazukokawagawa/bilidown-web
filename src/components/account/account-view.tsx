@@ -5,6 +5,7 @@ import { Film, QrCode, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageSkeleton } from "@/components/shared/loading";
+import { revealDelay } from "@/components/shared/motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAccount } from "@/hooks/use-account";
@@ -77,7 +78,7 @@ export function AccountView() {
               onLogout={() => void handleLogout()}
             />
           ) : (
-            <Card>
+            <Card className="anim-fade-up">
               <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <QrCode className="h-8 w-8" />
@@ -100,25 +101,28 @@ export function AccountView() {
           )}
 
           <div className="grid gap-4 sm:grid-cols-3">
-            {BENEFITS.map((benefit) => {
+            {BENEFITS.map((benefit, index) => {
               const Icon = benefit.icon;
               return (
-                <Card key={benefit.title}>
-                  <CardHeader className="gap-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <CardTitle className="text-base">{benefit.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">{benefit.description}</p>
-                  </CardContent>
-                </Card>
+                // 入场放 wrapper、hover 放卡片：两层职责分离，互不覆盖
+                <div key={benefit.title} className="anim-fade-up h-full" style={revealDelay(index)}>
+                  <Card className="group hover-lift h-full">
+                    <CardHeader className="gap-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Icon className="wiggle-on-hover h-4 w-4" />
+                      </div>
+                      <CardTitle className="text-base">{benefit.title}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">{benefit.description}</p>
+                    </CardContent>
+                  </Card>
+                </div>
               );
             })}
           </div>
 
-          <Card>
+          <Card className="anim-fade-up">
             <CardContent className="flex gap-3 py-4 text-sm text-muted-foreground">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
               <p>

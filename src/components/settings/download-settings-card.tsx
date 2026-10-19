@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { CircleCheck, CircleX } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,9 @@ interface DownloadSettingsCardProps {
   onChange: <K extends keyof SettingsFormState>(key: K, value: SettingsFormState[K]) => void;
   systemInfo: SystemInfo | null;
   systemLoading: boolean;
+  /** 动效：设置页错峰入场时由父级传入 anim-fade-up / revealDelay 的 style（可选） */
+  className?: string;
+  style?: CSSProperties;
 }
 
 /** 弹幕字号限制在 MIN/MAX 之间并取整，非法输入回退到最小值。 */
@@ -43,7 +47,14 @@ function clampDanmakuFontSize(value: number): number {
   return Math.min(MAX_DANMAKU_FONT_SIZE, Math.max(MIN_DANMAKU_FONT_SIZE, Math.round(value)));
 }
 
-export function DownloadSettingsCard({ form, onChange, systemInfo, systemLoading }: DownloadSettingsCardProps) {
+export function DownloadSettingsCard({
+  form,
+  onChange,
+  systemInfo,
+  systemLoading,
+  className,
+  style,
+}: DownloadSettingsCardProps) {
   const ffmpeg = systemInfo ? systemInfo.ffmpeg : null;
   const isDesktop = useIsDesktop();
   const desktopBridge = useDesktopBridge();
@@ -66,7 +77,7 @@ export function DownloadSettingsCard({ form, onChange, systemInfo, systemLoading
   }
 
   return (
-    <Card>
+    <Card className={className} style={style}>
       <CardHeader>
         <CardTitle>下载</CardTitle>
         <CardDescription>下载目录、文件命名、清晰度与 ffmpeg 合并策略</CardDescription>

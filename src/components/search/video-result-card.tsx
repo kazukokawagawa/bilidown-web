@@ -1,29 +1,33 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { FadeInImage, revealDelay } from "@/components/shared/motion";
 import { formatCount, formatUnixDate, stripHtml } from "@/lib/format";
 import type { SearchVideoItem } from "@/lib/types";
 
-export function VideoResultCard({ item }: { item: SearchVideoItem }) {
+export function VideoResultCard({ item, index = 0 }: { item: SearchVideoItem; index?: number }) {
   const title = stripHtml(item.title);
   const href = "/?input=" + encodeURIComponent(item.bvid);
   const date = formatUnixDate(item.pubdate).slice(0, 10);
   const author = stripHtml(item.author);
 
   return (
-    <Link href={href} className="group block h-full focus-visible:outline-none">
-      <Card className="h-full gap-0 overflow-hidden py-0 transition-shadow group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-ring">
+    <Link
+      href={href}
+      className="group anim-fade-up block h-full focus-visible:outline-none"
+      style={revealDelay(index, 40, 10)}
+    >
+      <Card className="hover-lift h-full gap-0 overflow-hidden py-0 group-focus-visible:ring-2 group-focus-visible:ring-ring">
         <div className="relative aspect-video overflow-hidden bg-muted">
           {item.cover ? (
-            <img
+            <FadeInImage
               src={item.cover}
               alt={title}
               referrerPolicy="no-referrer"
               loading="lazy"
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className="h-full w-full object-cover transition-[opacity,transform,filter,scale] duration-500 group-hover:scale-105"
             />
           ) : null}
           <Badge variant="secondary" className="absolute right-2 bottom-2 bg-black/70 font-normal text-white">

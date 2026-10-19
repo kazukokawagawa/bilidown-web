@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { FolderOpen, HardDrive, MonitorDown } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,13 @@ function DesktopSwitchRow({
 }
 
 /** 仅桌面版（Electron）可见的本地能力设置。 */
-export function DesktopSettingsCard() {
+interface DesktopSettingsCardProps {
+  /** 动效：设置页错峰入场时由父级传入 anim-fade-up / revealDelay 的 style（可选） */
+  className?: string;
+  style?: CSSProperties;
+}
+
+export function DesktopSettingsCard({ className, style }: DesktopSettingsCardProps) {
   const bridge = useDesktopBridge();
   const [trayOnClose, setTrayOnClose] = useDesktopPreference("trayOnClose", true);
   const [notify, setNotify] = useDesktopPreference("notify", true);
@@ -68,7 +75,7 @@ export function DesktopSettingsCard() {
   }
 
   return (
-    <Card>
+    <Card className={className} style={style}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           桌面版能力
