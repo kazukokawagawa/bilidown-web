@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 const CODECS: readonly Codec[] = ["avc", "hevc", "av1"];
 
-/** GET /api/bili/streams?bvid=&cid=&qn=&codec=&audioOnly=&duration= — 清晰度列表 + DASH 播放流。 */
+/** GET /api/bili/streams?bvid=&cid=&qn=&codec=&audioOnly=&audioQualityId=&duration= — 清晰度/音频质量列表 + DASH 播放流。 */
 export async function GET(request: Request) {
   try {
     const bvid = requireQuery(request, "bvid", "缺少 bvid 参数");
@@ -23,6 +23,8 @@ export async function GET(request: Request) {
     const audioOnlyParam = optionalQuery(request, "audioOnly");
     const audioOnly = audioOnlyParam === "1" || audioOnlyParam === "true";
     const duration = optionalQueryInt(request, "duration") ?? 0;
+    // 音频质量 id：0/缺省表示自动，由服务端按任务类型与登录权限选择最佳音轨
+    const audioQualityIdParam = optionalQueryInt(request, "audioQualityId") ?? 0;
 
     const result = await getPlayStreams({
       bvid,
@@ -30,6 +32,7 @@ export async function GET(request: Request) {
       qn,
       codec,
       audioOnly,
+      audioQualityId: audioQualityIdParam > 0 ? audioQualityIdParam : undefined,
       cookie: settings.cookie,
       duration: duration > 0 ? duration : undefined,
     });

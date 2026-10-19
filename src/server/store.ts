@@ -19,7 +19,7 @@ const VALID_STATUSES: ReadonlyArray<TaskStatus> = [
   "cancelled",
 ];
 const VALID_CODECS: ReadonlyArray<Codec> = ["avc", "hevc", "av1"];
-const VALID_FORMATS: ReadonlyArray<DownloadTask["format"]> = ["mp4", "m4a", "m4s", "mkv"];
+const VALID_FORMATS: ReadonlyArray<DownloadTask["format"]> = ["mp4", "m4a", "m4s", "mkv", "flac"];
 
 interface StoreState {
   timer: ReturnType<typeof setTimeout> | null;
@@ -54,6 +54,12 @@ function nullableStr(value: unknown): string | null {
   return typeof value === "string" && value ? value : null;
 }
 
+/** 规整音频质量 id：非负整数，缺失/非法回退 0（自动）。 */
+function audioQualityId(value: unknown): number {
+  const id = num(value, 0);
+  return Number.isInteger(id) && id >= 0 ? id : 0;
+}
+
 /** 把磁盘上的任意条目规整成 DownloadTask；缺少关键字段的条目返回 null。 */
 export function normalizeTask(raw: unknown): DownloadTask | null {
   if (!isRecord(raw)) return null;
@@ -81,6 +87,8 @@ export function normalizeTask(raw: unknown): DownloadTask | null {
     upName: str(raw.upName, ""),
     qn: num(raw.qn, 16),
     qualityName: str(raw.qualityName, ""),
+    audioQualityId: audioQualityId(raw.audioQualityId),
+    audioQualityName: str(raw.audioQualityName, ""),
     codec,
     format,
     status,

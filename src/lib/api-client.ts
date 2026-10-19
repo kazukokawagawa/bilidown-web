@@ -2,6 +2,7 @@
 
 import type {
   AppSettings,
+  Codec,
   CreateTaskInput,
   LoginPollResponse,
   LoginQrcodeResponse,
@@ -78,8 +79,26 @@ function qs(params: Record<string, string | number | boolean | undefined | null>
 export const api = {
   bili: {
     video: (input: string) => request<VideoResponse>("/api/bili/video" + qs({ input })),
-    streams: (params: { bvid: string; cid: number; qn?: number }) =>
-      request<StreamsResponse>("/api/bili/streams" + qs({ bvid: params.bvid, cid: params.cid, qn: params.qn })),
+    streams: (params: {
+      bvid: string;
+      cid: number;
+      qn?: number;
+      codec?: Codec;
+      audioOnly?: boolean;
+      /** 音频质量 id（0/缺省 = 自动，由服务端按设置与权限选择最佳音轨） */
+      audioQualityId?: number;
+    }) =>
+      request<StreamsResponse>(
+        "/api/bili/streams" +
+          qs({
+            bvid: params.bvid,
+            cid: params.cid,
+            qn: params.qn,
+            codec: params.codec,
+            audioOnly: params.audioOnly ? 1 : undefined,
+            audioQualityId: params.audioQualityId,
+          }),
+      ),
     search: (params: { keyword: string; type: "video" | "user"; page?: number; order?: string }) =>
       request<SearchResponse>("/api/bili/search" + qs(params)),
     suggest: (term: string) => request<SuggestResponse>("/api/bili/suggest" + qs({ term })),

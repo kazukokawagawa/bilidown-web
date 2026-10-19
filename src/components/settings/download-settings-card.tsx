@@ -18,10 +18,14 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useDesktopBridge, useIsDesktop } from "@/hooks/use-desktop";
 import {
+  AUDIO_QUALITY_CHOICES,
+  AUDIO_QUALITY_LABELS,
+  AUTO_AUDIO_QUALITY_LABEL,
   CODEC_NAMES,
   DANMAKU_OPACITY_OPTIONS,
   DEFAULT_QUALITIES,
   DOWNLOAD_THREAD_OPTIONS,
+  LOGIN_REQUIRED_AUDIO_IDS,
   LOGIN_REQUIRED_QN,
   MAX_DANMAKU_FONT_SIZE,
   MIN_DANMAKU_FONT_SIZE,
@@ -45,6 +49,13 @@ interface DownloadSettingsCardProps {
 function clampDanmakuFontSize(value: number): number {
   if (!Number.isFinite(value)) return MIN_DANMAKU_FONT_SIZE;
   return Math.min(MAX_DANMAKU_FONT_SIZE, Math.max(MIN_DANMAKU_FONT_SIZE, Math.round(value)));
+}
+
+/** 音频质量下拉选项文案：0 表示自动（最佳音质），其余按 id 映射，需登录/大会员的音轨追加提示。 */
+function audioQualityLabel(id: number): string {
+  if (id === 0) return AUTO_AUDIO_QUALITY_LABEL;
+  const base = AUDIO_QUALITY_LABELS[id] ?? "音频 " + String(id);
+  return LOGIN_REQUIRED_AUDIO_IDS.includes(id) ? base + "（需登录/大会员）" : base;
 }
 
 export function DownloadSettingsCard({
@@ -225,6 +236,28 @@ export function DownloadSettingsCard({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">首页解析后默认选中的清晰度</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="defaultAudioQualityId">默认音频质量</Label>
+            <Select
+              value={String(form.defaultAudioQualityId)}
+              onValueChange={(value) => onChange("defaultAudioQualityId", Number(value))}
+            >
+              <SelectTrigger id="defaultAudioQualityId" className="w-full">
+                <SelectValue placeholder="选择音频质量" />
+              </SelectTrigger>
+              <SelectContent>
+                {AUDIO_QUALITY_CHOICES.map((id) => (
+                  <SelectItem key={id} value={String(id)}>
+                    {audioQualityLabel(id)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              仅音频下载或视频音轨的默认质量；自动时仅音频优先无损/杜比，视频优先 192K AAC
+            </p>
           </div>
 
           <div className="space-y-2">

@@ -60,7 +60,7 @@ export interface OutputPlan {
   fileName: string;
 }
 
-export type OutputExtension = ".mp4" | ".m4a" | ".m4s" | ".mkv";
+export type OutputExtension = ".mp4" | ".m4a" | ".m4s" | ".mkv" | ".flac";
 
 export function planOutputPath(options: {
   downloadDir: string;

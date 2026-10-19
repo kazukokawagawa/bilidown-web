@@ -16,6 +16,7 @@ import { PartsList } from "./parts-list";
 import { QualitySelector } from "./quality-selector";
 import { RecentTasks } from "./recent-tasks";
 import { VideoCard } from "./video-card";
+import { VideoDetailCard } from "./video-detail-card";
 
 function ParseResultSkeleton() {
   return (
@@ -51,6 +52,9 @@ export function HomeContent() {
     selectedQn,
     selectedCodec,
     selectedStream,
+    audioQualities,
+    audioQualityId,
+    selectedAudioQuality,
     audioOnly,
     embedSubtitles,
     embedDanmaku,
@@ -67,6 +71,7 @@ export function HomeContent() {
     toggleAllEpisodes,
     selectQn,
     selectCodec,
+    selectAudioQuality,
     setAudioOnly,
     setEmbedSubtitles,
     setEmbedDanmaku,
@@ -109,6 +114,8 @@ export function HomeContent() {
   const showCollection = Boolean(collection && collectionEpisodeCount > 1);
   // 分P 与合集列表同时存在时，只让最后一个列表卡填满剩余高度，避免两个列表把空白区域对半分。
   const showParts = video ? video.pages.length > 1 : false;
+  // 单P / 无列表可展示时，用视频详情卡（完整简介、数据、视频参数）填满左栏底部空白。
+  const showDetails = !showCollection && !showParts;
 
   async function handleDownload() {
     const tasks = await createDownloads();
@@ -119,7 +126,7 @@ export function HomeContent() {
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <PageHeader
         title="解析下载"
-        description="粘贴 B 站视频链接、BV 号或番剧链接，选择清晰度与编码后开始下载。"
+        description="粘贴 B 站视频链接、BV 号或番剧链接，选择清晰度、编码与音频质量后开始下载。"
       />
 
       <ParseInput
@@ -135,8 +142,8 @@ export function HomeContent() {
         <ParseResultSkeleton />
       ) : video ? (
         <div className="anim-fade-up grid gap-6 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
-          {/* 左栏用 flex 纵向排列：视频卡固定高度，列表卡在 lg 下拉满剩余高度，
-              避免右栏（下载选项 + 开始下载）更高时左下方留出大片空白。 */}
+          {/* 左栏用 flex 纵向排列：视频卡固定高度，列表卡（或单P时的详情卡）在 lg 下拉满
+              剩余高度，避免右栏（下载选项 + 开始下载）更高时左下方留出大片空白。 */}
           <div className="anim-fade-up flex min-w-0 flex-col gap-6" style={{ animationDelay: "60ms" }}>
             <div className="shrink-0">
               <VideoCard
@@ -169,13 +176,19 @@ export function HomeContent() {
                 onToggleAll={toggleAllPages}
               />
             ) : null}
+            {showDetails ? (
+              <VideoDetailCard fill video={video} page={selectedPage} isLogin={isLogin} />
+            ) : null}
           </div>
           <div className="anim-fade-up min-w-0 space-y-6" style={{ animationDelay: "150ms" }}>
             <QualitySelector
               qualities={qualityChoices}
               codecChoices={codecChoices}
+              audioQualities={audioQualities}
               selectedQn={selectedQn}
               selectedCodec={selectedCodec}
+              selectedAudioQualityId={audioQualityId}
+              selectedAudioQuality={selectedAudioQuality}
               audioOnly={audioOnly}
               embedSubtitles={embedSubtitles}
               embedDanmaku={embedDanmaku}
@@ -187,6 +200,7 @@ export function HomeContent() {
               selectedPartCount={selectedItemCount}
               onQnChange={selectQn}
               onCodecChange={selectCodec}
+              onAudioQualityChange={selectAudioQuality}
               onAudioOnlyChange={setAudioOnly}
               onEmbedSubtitlesChange={setEmbedSubtitles}
               onEmbedDanmakuChange={setEmbedDanmaku}
@@ -199,6 +213,7 @@ export function HomeContent() {
               collectionTitle={collection?.title ?? null}
               qn={selectedQn}
               codec={selectedCodec}
+              audioQuality={selectedAudioQuality}
               audioOnly={audioOnly}
               embedSubtitles={embedSubtitles}
               embedDanmaku={embedDanmaku}

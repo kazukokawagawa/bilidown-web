@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { QUALITY_LABELS } from "@/lib/constants";
+import { AUDIO_QUALITY_LABELS, QUALITY_LABELS } from "@/lib/constants";
 import type { CreateTaskInput, DownloadTask, TaskAction, TaskStatus } from "@/lib/types";
 
 import { publishTaskEvent } from "../events";
@@ -59,6 +59,17 @@ function errorMessage(error: unknown): string {
 
 function taskKey(task: Pick<DownloadTask, "bvid" | "cid" | "page">): string {
   return task.bvid + ":" + task.cid + ":" + task.page;
+}
+
+/** 规整创建任务时的音频质量 id：合法正整数保留，其余（0/缺省/非法）按自动处理。 */
+function normalizeAudioQualityId(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : 0;
+}
+
+/** 音频质量 id 的展示名（0 = 自动）。 */
+function audioQualityLabel(id: number): string {
+  if (id <= 0) return "自动";
+  return AUDIO_QUALITY_LABELS[id] ?? "音频 " + id;
 }
 
 export class TaskManager {
@@ -131,6 +142,7 @@ export class TaskManager {
   async create(input: CreateTaskInput): Promise<DownloadTask> {
     await this.ensureInitialized();
     const now = Date.now();
+    const audioQualityId = normalizeAudioQualityId(input.audioQualityId);
     const task: DownloadTask = {
       id: randomUUID(),
       bvid: input.bvid,
@@ -144,7 +156,10 @@ export class TaskManager {
       qn: input.qn,
       qualityName: QUALITY_LABELS[input.qn] ?? "清晰度 " + input.qn,
       codec: input.codec,
-      format: input.audioOnly ? "m4a" : "mp4",
+      audioQualityId,
+      audioQualityName: audioQualityLabel(audioQualityId),
+      // 仅音频：30251（Hi-Res 无损）最终为 FLAC 容器，其余为 M4A；worker 解析后会写回真实值
+      format: input.audioOnly ? (audioQualityId === 30251 ? "flac" : "m4a") : "mp4",
       status: "queued",
       progress: 0,
       downloadedBytes: 0,
@@ -453,6 +468,8 @@ export class TaskManager {
         if (result.qn) current.qn = result.qn;
         if (result.qualityName) current.qualityName = result.qualityName;
         if (result.codec) current.codec = result.codec;
+        if (typeof result.audioQualityId === "number") current.audioQualityId = result.audioQualityId;
+        if (result.audioQualityName) current.audioQualityName = result.audioQualityName;
         if (typeof result.subtitleCount === "number") current.subtitleCount = result.subtitleCount;
         if (typeof result.danmakuCount === "number") current.danmakuCount = result.danmakuCount;
         if (result.danmakuPath !== undefined) current.danmakuPath = result.danmakuPath;

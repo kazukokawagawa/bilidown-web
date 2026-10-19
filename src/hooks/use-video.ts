@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { api, getErrorMessage } from "@/lib/api-client";
 import { selectionKey } from "@/lib/selection";
 import type {
+  AudioQualityOption,
   Codec,
   CollectionEpisode,
   CollectionSection,
@@ -84,6 +85,12 @@ export interface UseVideoResult {
   selectedQn: number | null;
   selectedCodec: Codec | null;
   selectedStream: StreamDetail | null;
+  /** 当前选择的音频质量 id（0 = 自动：按视频/仅音频模式选择最佳音轨） */
+  audioQualityId: number;
+  /** 可用音频质量列表（高 -> 低）；视频没有音频流时为空数组 */
+  audioQualities: AudioQualityOption[];
+  /** 实际选中的音频质量（来自最近一次取流响应；没有音轨时为 null） */
+  selectedAudioQuality: AudioQualityOption | null;
   audioOnly: boolean;
   embedSubtitles: boolean;
   embedDanmaku: boolean;
@@ -101,6 +108,9 @@ export interface UseVideoResult {
   toggleAllEpisodes: (checked: boolean) => void;
   selectQn: (qn: number) => void;
   selectCodec: (codec: Codec) => void;
+  /** 选择音频质量（0 = 自动），并立即按当前清晰度/编码重新取流，刷新「实际音轨/预估大小」 */
+  selectAudioQuality: (id: number) => void;
+  /** 切换仅音频模式（会影响自动音轨的选择：仅音频自动优先无损/杜比），切换后立即重新取流 */
   setAudioOnly: (value: boolean) => void;
   setEmbedSubtitles: (value: boolean) => void;
   setEmbedDanmaku: (value: boolean) => void;
@@ -118,9 +128,12 @@ export function useVideo(): UseVideoResult {
   const [selectedStream, setSelectedStream] = useState<StreamDetail | null>(null);
   const [selectedQn, setSelectedQn] = useState<number | null>(null);
   const [selectedCodec, setSelectedCodec] = useState<Codec | null>(null);
+  const [audioQualities, setAudioQualities] = useState<AudioQualityOption[]>([]);
+  const [audioQualityId, setAudioQualityIdState] = useState(0);
   const [selectedPages, setSelectedPages] = useState<VideoPage[]>([]);
   const [selectedEpisodes, setSelectedEpisodes] = useState<CollectionEpisode[]>([]);
-  const [audioOnly, setAudioOnly] = useState(false);
+  // 内部 setter 改名，对外暴露的 setAudioOnly 是需要重新取流的回调（见下方）
+  const [audioOnly, setAudioOnlyState] = useState(false);
   const [embedSubtitles, setEmbedSubtitles] = useState(false);
   const [embedDanmaku, setEmbedDanmaku] = useState(false);
   const [saveDanmaku, setSaveDanmaku] = useState(false);
@@ -134,16 +147,19 @@ export function useVideo(): UseVideoResult {
   const streamsSeq = useRef(0);
   /** 当前已为哪个 cid 取过流；只有主分P cid 变化时才重新请求 */
   const streamsCidRef = useRef<number | null>(null);
-  /** 设置页的默认清晰度/编码与弹幕开关，解析时作为初值 */
+  /** 设置页的默认清晰度/编码/音频质量与弹幕开关，解析时作为初值 */
   const defaultsRef = useRef<{
     qn: number | null;
     codec: Codec | null;
+    /** 设置页的默认音频质量 id（0 = 自动） */
+    audioQualityId: number;
     embedSubtitles: boolean;
     embedDanmaku: boolean;
     saveDanmaku: boolean;
   }>({
     qn: null,
     codec: null,
+    audioQualityId: 0,
     embedSubtitles: false,
     embedDanmaku: false,
     saveDanmaku: false,
@@ -171,6 +187,7 @@ export function useVideo(): UseVideoResult {
         defaultsRef.current = {
           qn: response.settings.defaultQn ?? null,
           codec: response.settings.preferCodec ?? null,
+          audioQualityId: response.settings.defaultAudioQualityId ?? 0,
           embedSubtitles: response.settings.embedSubtitles ?? false,
           embedDanmaku: response.settings.embedDanmaku ?? false,
           saveDanmaku: response.settings.saveDanmaku ?? false,
@@ -184,26 +201,58 @@ export function useVideo(): UseVideoResult {
   }, []);
 
   const loadStreams = useCallback(
-    async (bvid: string, cid: number, options?: { qn?: number | null; codec?: Codec | null }) => {
+    async (
+      bvid: string,
+      cid: number,
+      options?: {
+        qn?: number | null;
+        codec?: Codec | null;
+        audioOnly?: boolean;
+        audioQualityId?: number | null;
+        /** 只刷新实际音轨与预估大小，不覆盖清晰度/编码列表（切换音频质量时避免列表闪烁） */
+        preserveVideoSelection?: boolean;
+      },
+    ) => {
       streamsSeq.current += 1;
       const seq = streamsSeq.current;
+      const requestedAudioQualityId =
+        options?.audioQualityId && options.audioQualityId > 0 ? options.audioQualityId : undefined;
       setStreamsLoading(true);
       try {
-        const response = await api.bili.streams({ bvid, cid, qn: options?.qn ?? undefined });
+        const response = await api.bili.streams({
+          bvid,
+          cid,
+          qn: options?.qn ?? undefined,
+          codec: options?.codec ?? undefined,
+          audioOnly: options?.audioOnly ?? false,
+          audioQualityId: requestedAudioQualityId,
+        });
         if (seq !== streamsSeq.current) return null;
+        // 音频质量列表与「实际音轨」始终随取流结果更新（防御式兜底旧版接口未返回的情况）
+        setAudioQualities(response.audioQualities ?? []);
+        setSelectedStream(response.selected);
+        // 所选音轨在当前视频不可用（如切换分P后没有无损/杜比）时回退「自动」，避免下拉框 value 无匹配项显示空白
+        if (
+          requestedAudioQualityId &&
+          !(response.audioQualities ?? []).some((quality) => quality.id === requestedAudioQualityId)
+        ) {
+          setAudioQualityIdState(0);
+        }
+        if (options?.preserveVideoSelection) return response;
         const available = uniqueCodecs(response.qualities, response.selected.qn);
         const preferred = options?.codec ?? null;
         setQualities(response.qualities);
-        setSelectedStream(response.selected);
         setSelectedQn(response.selected.qn);
         setSelectedCodec(preferred && available.includes(preferred) ? preferred : response.selected.codec);
         return response;
       } catch (error) {
         if (seq !== streamsSeq.current) return null;
-        setQualities([]);
         setSelectedStream(null);
-        setSelectedQn(null);
-        setSelectedCodec(null);
+        if (!options?.preserveVideoSelection) {
+          setQualities([]);
+          setSelectedQn(null);
+          setSelectedCodec(null);
+        }
         toast.error("获取清晰度失败：" + getErrorMessage(error));
         return null;
       } finally {
@@ -221,13 +270,21 @@ export function useVideo(): UseVideoResult {
 
   /** 主分P cid 变化时才重新取流；相同 cid（如取消勾选后面的分P）不打断当前清晰度。 */
   const loadStreamsForPrimary = useCallback(
-    (page: VideoPage | null, options?: { qn?: number | null; codec?: Codec | null }) => {
+    (
+      page: VideoPage | null,
+      options?: { qn?: number | null; codec?: Codec | null; audioOnly?: boolean; audioQualityId?: number | null },
+    ) => {
       if (!video || !page) return;
       if (streamsCidRef.current === page.cid) return;
       streamsCidRef.current = page.cid;
-      void loadStreams(video.bvid, page.cid, options ?? { qn: selectedQn, codec: selectedCodec });
+      void loadStreams(video.bvid, page.cid, {
+        qn: options?.qn ?? selectedQn,
+        codec: options?.codec ?? selectedCodec,
+        audioOnly: options?.audioOnly ?? audioOnly,
+        audioQualityId: options?.audioQualityId ?? audioQualityId,
+      });
     },
-    [video, selectedQn, selectedCodec, loadStreams],
+    [video, selectedQn, selectedCodec, audioOnly, audioQualityId, loadStreams],
   );
 
   const parse = useCallback(
@@ -266,10 +323,13 @@ export function useVideo(): UseVideoResult {
         setSelectedPages(nextPages);
         setSelectedEpisodes(nextEpisodes);
         setQualities([]);
+        setAudioQualities([]);
         setSelectedStream(null);
         setSelectedQn(null);
         setSelectedCodec(null);
-        setAudioOnly(false);
+        setAudioOnlyState(false);
+        // 解析新视频时恢复设置页的默认音频质量（0 = 自动）
+        setAudioQualityIdState(defaults.audioQualityId ?? 0);
         setEmbedSubtitles(defaults.embedSubtitles);
         setEmbedDanmaku(defaults.embedDanmaku);
         setSaveDanmaku(defaults.saveDanmaku);
@@ -279,6 +339,8 @@ export function useVideo(): UseVideoResult {
           void loadStreams(nextVideo.bvid, primary.cid, {
             qn: defaults.qn,
             codec: defaults.codec,
+            audioOnly: false,
+            audioQualityId: defaults.audioQualityId,
           });
         }
         return response;
@@ -363,14 +425,52 @@ export function useVideo(): UseVideoResult {
       setSelectedCodec(nextCodec);
       if (!video || !primaryPage) return;
       streamsCidRef.current = primaryPage.cid;
-      void loadStreams(video.bvid, primaryPage.cid, { qn, codec: nextCodec });
+      void loadStreams(video.bvid, primaryPage.cid, {
+        qn,
+        codec: nextCodec,
+        audioOnly,
+        audioQualityId,
+      });
     },
-    [qualities, selectedCodec, video, primaryPage, loadStreams],
+    [qualities, selectedCodec, video, primaryPage, audioOnly, audioQualityId, loadStreams],
   );
 
   const selectCodec = useCallback((codec: Codec) => {
     setSelectedCodec(codec);
   }, []);
+
+  /** 选择音频质量：立即按当前清晰度/编码重新取流，让「实际音轨/预估大小」同步更新。 */
+  const selectAudioQuality = useCallback(
+    (id: number) => {
+      const nextId = id > 0 ? id : 0;
+      setAudioQualityIdState(nextId);
+      if (!video || !primaryPage) return;
+      void loadStreams(video.bvid, primaryPage.cid, {
+        qn: selectedQn,
+        codec: selectedCodec,
+        audioOnly,
+        audioQualityId: nextId,
+        preserveVideoSelection: true,
+      });
+    },
+    [video, primaryPage, selectedQn, selectedCodec, audioOnly, loadStreams],
+  );
+
+  /** 切换仅音频：audioOnly 会影响自动音轨的选择（优先无损/杜比），切换后立即重新取流。 */
+  const setAudioOnly = useCallback(
+    (value: boolean) => {
+      setAudioOnlyState(value);
+      if (!video || !primaryPage) return;
+      void loadStreams(video.bvid, primaryPage.cid, {
+        qn: selectedQn,
+        codec: selectedCodec,
+        audioOnly: value,
+        audioQualityId,
+        preserveVideoSelection: true,
+      });
+    },
+    [video, primaryPage, selectedQn, selectedCodec, audioQualityId, loadStreams],
+  );
 
   const createDownloads = useCallback(async (): Promise<DownloadTask[]> => {
     if (!video || (selectedPages.length === 0 && selectedEpisodes.length === 0)) {
@@ -419,6 +519,7 @@ export function useVideo(): UseVideoResult {
           qn: selectedQn,
           codec: selectedCodec,
           audioOnly,
+          audioQualityId: audioQualityId > 0 ? audioQualityId : null,
           embedSubtitles: audioOnly ? false : embedSubtitles,
           listTitle: hasMultiplePages ? video.title : null,
           listIndex: page.page,
@@ -446,6 +547,7 @@ export function useVideo(): UseVideoResult {
           qn: selectedQn,
           codec: selectedCodec,
           audioOnly,
+          audioQualityId: audioQualityId > 0 ? audioQualityId : null,
           embedSubtitles: audioOnly ? false : embedSubtitles,
           listTitle: collection?.title ?? null,
           listIndex: episodeIndexes.get(episode.id) ?? null,
@@ -488,6 +590,7 @@ export function useVideo(): UseVideoResult {
     selectedQn,
     selectedCodec,
     audioOnly,
+    audioQualityId,
     embedSubtitles,
     embedDanmaku,
     saveDanmaku,
@@ -509,6 +612,8 @@ export function useVideo(): UseVideoResult {
   }, [qualities, selectedQn, selectedCodec]);
 
   const collection = video?.collection ?? null;
+  /** 实际选中的音频质量（无音轨时为 null） */
+  const selectedAudioQuality = selectedStream?.audioQuality ?? null;
   const totalSelected = selectedPages.length + selectedEpisodes.length;
   const canDownload =
     video !== null &&
@@ -535,6 +640,9 @@ export function useVideo(): UseVideoResult {
     selectedQn,
     selectedCodec,
     selectedStream,
+    audioQualityId,
+    audioQualities,
+    selectedAudioQuality,
     audioOnly,
     embedSubtitles,
     embedDanmaku,
@@ -551,6 +659,7 @@ export function useVideo(): UseVideoResult {
     toggleAllEpisodes,
     selectQn,
     selectCodec,
+    selectAudioQuality,
     setAudioOnly,
     setEmbedSubtitles,
     setEmbedDanmaku,

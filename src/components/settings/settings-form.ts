@@ -8,6 +8,7 @@ export type SettingsFormState = Pick<
   | "namingTemplate"
   | "maxConcurrent"
   | "defaultQn"
+  | "defaultAudioQualityId"
   | "preferCodec"
   | "mergeWithFfmpeg"
   | "ffmpegPath"
@@ -32,6 +33,7 @@ export function toSettingsForm(settings: AppSettings | PublicSettings): Settings
     namingTemplate: settings.namingTemplate,
     maxConcurrent: settings.maxConcurrent,
     defaultQn: settings.defaultQn,
+    defaultAudioQualityId: settings.defaultAudioQualityId,
     preferCodec: settings.preferCodec,
     mergeWithFfmpeg: settings.mergeWithFfmpeg,
     ffmpegPath: settings.ffmpegPath,

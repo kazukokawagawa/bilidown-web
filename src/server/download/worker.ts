@@ -55,6 +55,10 @@ export interface WorkerResult {
   qn?: number;
   qualityName?: string;
   codec?: Codec;
+  /** 实际选中的音频质量 id（0 表示无音轨/未指定） */
+  audioQualityId?: number;
+  /** 实际选中的音频质量名称（如「192K」/「Hi-Res 无损」；无音轨为「自动」） */
+  audioQualityName?: string;
   /** 实际内嵌的字幕轨道数（0 表示未内嵌） */
   subtitleCount?: number;
   /** 实际获取到的弹幕条数 */
@@ -531,16 +535,23 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
     qn: task.qn,
     codec: task.codec,
     audioOnly: task.audioOnly,
+    audioQualityId: task.audioQualityId > 0 ? task.audioQualityId : undefined,
     cookie: settings.cookie,
     duration,
   });
   throwIfAborted(signal);
 
   const selected = streams.selected;
+  // 实际选中的音频质量（无音轨时为 0 / 自动），完成后回写任务用于列表展示
+  const audioQualityId = selected.audioQuality?.id ?? 0;
+  const audioQualityName = selected.audioQuality?.label ?? "自动";
+  const audioKind = selected.audioQuality?.kind;
   patch({
     qn: selected.qn,
     qualityName: selected.label,
     codec: selected.codec,
+    audioQualityId,
+    audioQualityName,
     totalBytes: (selected.video?.size ?? 0) + (selected.audio?.size ?? 0),
   });
 
@@ -715,8 +726,13 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
   throwIfAborted(signal);
 
   // 5. 生成最终文件名（内嵌字幕/弹幕成功时为 .mkv；列表下载时放入列表子文件夹）
-  const wantMkv = subtitleInputs.length > 0 || canEmbedDanmaku;
-  const extension: OutputExtension = task.audioOnly ? ".m4a" : wantMkv ? ".mkv" : ".mp4";
+  // 仅音频：Hi-Res 无损输出 .flac，其余音轨（AAC/杜比）统一转封装为 .m4a
+  const audioExtension: OutputExtension = audioKind === "flac" ? ".flac" : ".m4a";
+  const audioFormat: DownloadTask["format"] = audioKind === "flac" ? "flac" : "m4a";
+  // 非 AAC 音轨（Hi-Res 无损/杜比全景声）封装进 MKV 兼容性更好；普通 AAC 视频仍保持 MP4
+  const wantMkv =
+    subtitleInputs.length > 0 || canEmbedDanmaku || (!task.audioOnly && audioKind !== undefined && audioKind !== "aac");
+  const extension: OutputExtension = task.audioOnly ? audioExtension : wantMkv ? ".mkv" : ".mp4";
   // 列表文件夹：优先使用任务记录的列表名；旧任务（无 listTitle）沿用「多P视频按标题建文件夹」行为
   let listFolder: string | null = null;
   let listIndex: number | null = null;
@@ -783,8 +799,11 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
 
   if (task.audioOnly) {
     let sourcePath = audioTmp;
+    let audioOutput = output;
+    let audioOutputFormat: DownloadTask["format"] = audioFormat;
+    let audioWarning: string | null = null;
     if (ffmpegInfo.available) {
-      const remuxed = path.join(tmpDir, "audio.m4a");
+      const remuxed = path.join(tmpDir, "audio" + audioExtension);
       try {
         await remuxToContainer({
           ffmpegPath: settings.ffmpegPath,
@@ -795,22 +814,45 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
         sourcePath = remuxed;
       } catch (error) {
         console.warn("[worker] 音频转封装失败，直接保存原始 m4s 数据:", errorMessage(error));
+        if (audioKind === "flac") {
+          audioWarning = "无损音轨转封装为 FLAC 失败，已保存原始 m4s 分片";
+        }
       }
+    } else if (audioKind === "flac") {
+      audioWarning = "未检测到可用的 ffmpeg，无法把 Hi-Res 无损音轨转封装为 FLAC，已保存原始 m4s 分片";
     }
-    await moveFile(sourcePath, output.filePath);
-    const size = await fileSize(output.filePath);
-    const danmakuInfo = await saveDanmakuFiles(output.dir, output.fileName);
+    // FLAC 转封装失败时源文件仍是 fMP4 分片，不能伪装成 .flac 保存，改为 .m4s
+    if (audioKind === "flac" && sourcePath === audioTmp) {
+      const m4sPlan = planOutputPath({
+        downloadDir,
+        namingTemplate: settings.namingTemplate,
+        context: namingContext,
+        extension: ".m4s",
+        folder: listFolder,
+        index: listIndex,
+      });
+      audioOutput = await reserveOutputPath(m4sPlan.dir, m4sPlan.fileName);
+      audioOutputFormat = "m4s";
+    }
+    await moveFile(sourcePath, audioOutput.filePath);
+    const size = await fileSize(audioOutput.filePath);
+    const danmakuInfo = await saveDanmakuFiles(audioOutput.dir, audioOutput.fileName);
     await cleanupTaskTemp(downloadDir, task.id);
+    const audioWarningText = [buildWarning(), audioWarning]
+      .filter((item): item is string => Boolean(item))
+      .join("；");
     return {
       status: "completed",
-      error: buildWarning(),
-      filePath: output.filePath,
-      fileName: output.fileName,
+      error: audioWarningText || null,
+      filePath: audioOutput.filePath,
+      fileName: audioOutput.fileName,
       fileSize: size,
-      format: "m4a",
+      format: audioOutputFormat,
       qn: selected.qn,
       qualityName: selected.label,
       codec: selected.codec,
+      audioQualityId,
+      audioQualityName,
       subtitleCount: 0,
       danmakuCount: danmakuInfo.count,
       danmakuPath: danmakuInfo.path,
@@ -849,6 +891,8 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
           qn: selected.qn,
           qualityName: selected.label,
           codec: selected.codec,
+          audioQualityId,
+          audioQualityName,
           subtitleCount: subtitleInputs.length,
           danmakuCount: danmakuInfo.count,
           danmakuPath: danmakuInfo.path,
@@ -862,7 +906,8 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
         ]
           .filter(Boolean)
           .join("/");
-        embedWarning = (failedParts || "字幕") + "内嵌合并失败，已按 MP4 保存";
+        // 仅因高音质音轨（Hi-Res/杜比）触发 MKV 时没有字幕/弹幕，提示改为容器回退
+        embedWarning = failedParts ? failedParts + "内嵌合并失败，已按 MP4 保存" : "MKV 封装失败，已按 MP4 保存";
       }
     }
 
@@ -912,6 +957,8 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
         qn: selected.qn,
         qualityName: selected.label,
         codec: selected.codec,
+        audioQualityId,
+        audioQualityName,
         subtitleCount: 0,
         danmakuCount: danmakuInfo.count,
         danmakuPath: danmakuInfo.path,
@@ -964,6 +1011,8 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
     qn: selected.qn,
     qualityName: selected.label,
     codec: selected.codec,
+    audioQualityId,
+    audioQualityName,
     subtitleCount: 0,
     danmakuCount: danmakuInfo.count,
     danmakuPath: danmakuInfo.path,

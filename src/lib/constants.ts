@@ -1,4 +1,4 @@
-import type { AppSettings, TaskStatus } from "./types";
+import type { AppSettings, AudioQualityKind, TaskStatus } from "./types";
 
 export const APP_NAME = "bilidown";
 export const APP_VERSION = "1.2.6";
@@ -10,6 +10,7 @@ export const BILI_ORIGIN = "https://www.bilibili.com";
 
 export const BILI_API = {
   view: "https://api.bilibili.com/x/web-interface/view",
+  tags: "https://api.bilibili.com/x/tag/archive/tags",
   nav: "https://api.bilibili.com/x/web-interface/nav",
   playurl: "https://api.bilibili.com/x/player/playurl",
   searchWbi: "https://api.bilibili.com/x/web-interface/wbi/search/type",
@@ -56,11 +57,50 @@ export const CODEC_NAMES: Record<"avc" | "hevc" | "av1", string> = {
 /** Qualities that require a logged-in cookie on most videos. */
 export const LOGIN_REQUIRED_QN = [127, 126, 125, 120, 116, 112, 80];
 
+/** Bilibili DASH 音频流 id -> 展示名（30251 Hi-Res 无损 / 30250 杜比全景声 / 30280 192K / 30232 132K / 30216 64K）。 */
+export const AUDIO_QUALITY_LABELS: Record<number, string> = {
+  30251: "Hi-Res 无损",
+  30250: "杜比全景声",
+  30280: "192K",
+  30232: "132K",
+  30216: "64K",
+};
+
+/** 音频质量排序权重（数值越小越优先，自动选择时按该顺序取最佳可用音轨）。 */
+export const AUDIO_QUALITY_RANK: Record<number, number> = {
+  30251: 0,
+  30250: 1,
+  30280: 2,
+  30232: 3,
+  30216: 4,
+};
+
+/** 音频质量下拉可选值（0 = 自动，按视频/仅音频模式选择最佳音轨）。 */
+export const AUDIO_QUALITY_CHOICES = [0, 30251, 30250, 30280, 30232, 30216] as const;
+
+/**
+ * 需要大会员（杜比全景声 / Hi-Res 无损）的音频流 id。
+ * 132K/192K 是否可用由接口实际返回决定：实测未登录时部分视频仍会返回并可直接下载，
+ * 因此不能仅凭 id 静态置灰，只有杜比/Hi-Res 这类会员音轨需要提示登录/大会员。
+ */
+export const LOGIN_REQUIRED_AUDIO_IDS = [30251, 30250];
+
+/** 自动音频质量在设置页/任务中的展示名。 */
+export const AUTO_AUDIO_QUALITY_LABEL = "自动（最佳音质）";
+
+/** 音频质量种类展示名。 */
+export const AUDIO_QUALITY_KIND_LABELS: Record<AudioQualityKind, string> = {
+  aac: "AAC",
+  dolby: "杜比全景声",
+  flac: "FLAC 无损",
+};
+
 export const DEFAULT_SETTINGS: AppSettings = {
   downloadDir: "",
   namingTemplate: "{title}",
   maxConcurrent: 1,
   defaultQn: 80,
+  defaultAudioQualityId: 0,
   preferCodec: "avc",
   mergeWithFfmpeg: true,
   ffmpegPath: "ffmpeg",

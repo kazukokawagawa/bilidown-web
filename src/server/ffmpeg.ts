@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import path from "node:path";
 
 import type { FfmpegInfo } from "@/lib/types";
 
@@ -217,7 +218,15 @@ export async function mergeDashToMkv(options: {
   await assertSuccess(command, args, options.signal);
 }
 
-/** 单轨封装（音频转 m4a / 无音轨视频转 mp4）。 */
+/** 支持 -movflags +faststart 的 MP4 系容器扩展名（flac 等原生音频容器不支持该参数）。 */
+const FASTSTART_EXTENSIONS = new Set([".mp4", ".m4a", ".mov"]);
+
+/** 输出文件是否需要 faststart 优化（仅 MP4 系容器需要）。 */
+function needsFaststart(outputPath: string): boolean {
+  return FASTSTART_EXTENSIONS.has(path.extname(outputPath).toLowerCase());
+}
+
+/** 单轨封装（音频转 m4a/flac、无音轨视频转 mp4）；仅 MP4 系容器追加 faststart。 */
 export async function remuxToContainer(options: {
   ffmpegPath: string | null | undefined;
   inputPath: string;
@@ -225,9 +234,8 @@ export async function remuxToContainer(options: {
   signal?: AbortSignal;
 }): Promise<void> {
   const command = resolveCommand(options.ffmpegPath);
-  await assertSuccess(
-    command,
-    ["-y", "-hide_banner", "-loglevel", "error", "-i", options.inputPath, "-c", "copy", "-movflags", "+faststart", options.outputPath],
-    options.signal,
-  );
+  const args = ["-y", "-hide_banner", "-loglevel", "error", "-i", options.inputPath, "-c", "copy"];
+  if (needsFaststart(options.outputPath)) args.push("-movflags", "+faststart");
+  args.push(options.outputPath);
+  await assertSuccess(command, args, options.signal);
 }

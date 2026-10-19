@@ -129,6 +129,20 @@ function taskBadges(task: DownloadTask): TaskBadge[] {
       className: "max-w-48 truncate",
     });
   }
+  // 非音频任务：视频音轨为杜比全景声 / Hi-Res 无损时单独提示；普通 AAC 音轨不额外占位。
+  if (
+    !task.audioOnly &&
+    task.audioQualityId >= 30250 &&
+    task.audioQualityName &&
+    task.audioQualityName !== "自动"
+  ) {
+    badges.push({
+      key: "audio-quality",
+      label: "音轨 · " + task.audioQualityName,
+      variant: "secondary",
+      className: "max-w-40 truncate",
+    });
+  }
   if (task.embedSubtitles && !task.audioOnly) {
     badges.push({
       key: "subtitle",
@@ -172,12 +186,17 @@ export function TaskRow({ task, busy, browserFfmpegAvailable, browserFfmpegBytes
   const isSplitTask = task.format === "m4s" && !task.audioOnly;
   const hasAudioPart =
     isSplitTask && (Boolean(task.audioFilePath) || Boolean(task.fileName && !task.fileName.startsWith("无声-")));
-  // 清晰度、编码等信息合并到标题下方一行，标签只保留真正需要一眼看到的条目
+  // 清晰度、编码等信息合并到标题下方一行，标签只保留真正需要一眼看到的条目；
+  // 仅音频任务在「仅音频」后补充实际音质（自动/与清晰度重复时不重复展示）。
+  const audioOnlyMeta =
+    task.audioQualityName && task.audioQualityName !== "自动" && task.audioQualityName !== task.qualityName
+      ? "仅音频 · " + task.audioQualityName
+      : "仅音频";
   const metaParts = [
     task.upName,
     task.bvid,
     task.qualityName,
-    task.audioOnly ? "仅音频" : CODEC_NAMES[task.codec],
+    task.audioOnly ? audioOnlyMeta : CODEC_NAMES[task.codec],
   ].filter((part): part is string => Boolean(part));
   const badges = taskBadges(task);
   const sourceUrl = task.sourceUrl || "https://www.bilibili.com/video/" + task.bvid;

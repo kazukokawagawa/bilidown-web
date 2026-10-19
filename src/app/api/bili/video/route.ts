@@ -1,5 +1,5 @@
 import { getCookie } from "@/server/settings";
-import { getPgcCollection, getVideoInfo, resolveInput } from "@/server/bili/client";
+import { getPgcCollection, getVideoInfo, getVideoTags, resolveInput } from "@/server/bili/client";
 import { apiOk, errorToResponse, HttpError, queryValue } from "@/server/http";
 
 export const runtime = "nodejs";
@@ -30,6 +30,23 @@ export async function GET(request: Request) {
         "[bili] 获取番剧剧集列表失败，降级为单集信息:",
         error instanceof Error ? error.message : error,
       );
+    }
+
+    // 仅单 P 且没有合集/番剧剧集列表时才补充标签（此时首页展示视频详情卡片）。
+    const collectionEpisodeCount = (video.collection?.sections ?? []).reduce(
+      (total, section) => total + section.episodes.length,
+      0,
+    );
+    if (video.pages.length <= 1 && collectionEpisodeCount <= 1) {
+      try {
+        const tags = await getVideoTags(video.bvid, cookie);
+        if (tags.length > 0) video.tags = tags;
+      } catch (error) {
+        console.warn(
+          "[bili] 获取视频标签失败:",
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
 
     return apiOk({ input: parsed, video });

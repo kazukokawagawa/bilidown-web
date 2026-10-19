@@ -43,6 +43,8 @@ export async function POST(request: Request) {
     const aid = optionalInteger(body, "aid", 0, 0);
     const page = optionalInteger(body, "page", 1, 1);
     const qn = optionalInteger(body, "qn", settings.defaultQn, 1);
+    // 音频质量 id：0/缺省 = 自动（服务端下载时按权限选择最佳音轨）
+    const audioQualityId = optionalInteger(body, "audioQualityId", 0, 0, 100000);
     const codec = optionalEnum(body, "codec", CODECS, settings.preferCodec);
     const title = requireString(body, "title", "缺少 title", 500);
     const partTitle = optionalString(body, "partTitle", title, 500) ?? title;
@@ -73,6 +75,7 @@ export async function POST(request: Request) {
       qn,
       codec,
       audioOnly,
+      audioQualityId,
       sourceUrl,
       embedSubtitles,
       listTitle,

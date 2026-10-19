@@ -95,6 +95,13 @@ export function normalizeSettings(raw: unknown): AppSettings {
       typeof raw.defaultQn === "number" && Number.isInteger(raw.defaultQn) && raw.defaultQn > 0
         ? raw.defaultQn
         : DEFAULT_SETTINGS.defaultQn,
+    // 默认音频质量 id：0 = 自动；缺失/非法回退默认值（不做白名单校验，兼容后续新增音轨 id）
+    defaultAudioQualityId:
+      typeof raw.defaultAudioQualityId === "number" &&
+      Number.isInteger(raw.defaultAudioQualityId) &&
+      raw.defaultAudioQualityId >= 0
+        ? raw.defaultAudioQualityId
+        : DEFAULT_SETTINGS.defaultAudioQualityId,
     preferCodec: isCodec(raw.preferCodec) ? raw.preferCodec : DEFAULT_SETTINGS.preferCodec,
     mergeWithFfmpeg: normalizeBoolean(raw.mergeWithFfmpeg, DEFAULT_SETTINGS.mergeWithFfmpeg),
     ffmpegPath: typeof raw.ffmpegPath === "string" ? raw.ffmpegPath.trim() : DEFAULT_SETTINGS.ffmpegPath,
@@ -158,6 +165,16 @@ export function normalizeSettingsPatch(raw: unknown): Partial<AppSettings> {
       throw new SettingsValidationError("defaultQn 必须是正整数");
     }
     patch.defaultQn = value;
+  }
+  if ("defaultAudioQualityId" in raw) {
+    const value = raw.defaultAudioQualityId;
+    if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+      throw new SettingsValidationError("defaultAudioQualityId 必须是整数");
+    }
+    if (value < 0 || value > 100000) {
+      throw new SettingsValidationError("defaultAudioQualityId 取值范围为 0~100000");
+    }
+    patch.defaultAudioQualityId = value;
   }
   if ("preferCodec" in raw) {
     if (!isCodec(raw.preferCodec)) throw new SettingsValidationError("preferCodec 必须是 avc / hevc / av1 之一");
@@ -248,7 +265,13 @@ async function loadSettings(): Promise<AppSettings> {
 }
 
 export async function getSettings(): Promise<AppSettings> {
-  if (state.cached) return state.cached;
+  if (state.cached) {
+    // 防御式兼容：Next dev 热更新后 globalThis 缓存的对象可能来自旧版本，缺少新增字段时补默认值
+    if (typeof state.cached.defaultAudioQualityId !== "number") {
+      state.cached = { ...state.cached, defaultAudioQualityId: DEFAULT_SETTINGS.defaultAudioQualityId };
+    }
+    return state.cached;
+  }
   if (!state.loading) state.loading = loadSettings();
   const settings = await state.loading;
   state.cached = settings;

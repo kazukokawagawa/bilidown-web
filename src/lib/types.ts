@@ -84,12 +84,18 @@ export interface VideoInfo {
   pubdate: number;
   owner: VideoOwner;
   stat: VideoStat;
+  /** 分区名（B 站 view.tname），接口未返回时为空字符串 */
+  tname?: string;
+  /** 版权类型：1=自制，2=转载（B 站 view.copyright） */
+  copyright?: number;
   pages: VideoPage[];
   videos: number;
   /** view 接口的 redirect_url（番剧视频通常指向 bangumi/play/epXXX；普通视频为空） */
   redirectUrl?: string;
   /** 视频所属合集（ugc_season）或番剧 season 剧集；非合集/非番剧为 null */
   collection: VideoCollection | null;
+  /** 视频标签（仅单P/无列表时由服务端补充，最多 20 个） */
+  tags?: string[];
 }
 
 export type Codec = "avc" | "hevc" | "av1";
@@ -98,6 +104,21 @@ export interface QualityOption {
   qn: number;
   label: string;
   codec: Codec;
+  needsLogin: boolean;
+}
+
+/** 音频流种类：普通 AAC / 杜比全景声 / Hi-Res 无损 FLAC。 */
+export type AudioQualityKind = "aac" | "dolby" | "flac";
+
+/** 可选的音频质量（B 站 DASH audio 流）。 */
+export interface AudioQualityOption {
+  /** B 站 DASH 音频流 id：30216/30232/30280（AAC）、30250（杜比全景声）、30251（Hi-Res 无损） */
+  id: number;
+  label: string;
+  kind: AudioQualityKind;
+  /** 音频码率（bit/s），接口未返回时为 undefined */
+  bandwidth?: number;
+  /** 未登录时不可用（132K/192K 需登录，杜比全景声/Hi-Res 需大会员） */
   needsLogin: boolean;
 }
 
@@ -115,6 +136,8 @@ export interface StreamDetail {
   video?: StreamSource;
   audio?: StreamSource;
   audioOnly: boolean;
+  /** 实际选中的音频质量；没有音轨时为 undefined */
+  audioQuality?: AudioQualityOption;
 }
 
 /** B 站 CC 字幕轨道（由 /x/player/wbi/v2 返回）。 */
@@ -197,8 +220,12 @@ export interface DownloadTask {
   qn: number;
   qualityName: string;
   codec: Codec;
-  /** 最终文件容器；embedSubtitles 生效且找到字幕时为 mkv */
-  format: "mp4" | "m4a" | "m4s" | "mkv";
+  /** 音频流质量 id（0 表示自动；服务端下载时会写回实际选中的值） */
+  audioQualityId: number;
+  /** 音频流质量名称（如「192K」「Hi-Res 无损」；自动时为「自动」） */
+  audioQualityName: string;
+  /** 最终文件容器；embedSubtitles 生效且找到字幕时为 mkv，Hi-Res 无损音轨为 flac */
+  format: "mp4" | "m4a" | "m4s" | "mkv" | "flac";
   status: TaskStatus;
   progress: number;
   downloadedBytes: number;
@@ -248,6 +275,8 @@ export interface CreateTaskInput {
   qn: number;
   codec: Codec;
   audioOnly: boolean;
+  /** 可选：音频质量 id（0 或缺省表示自动，按设置与登录权限选择最佳音轨） */
+  audioQualityId?: number | null;
   sourceUrl: string;
   /** 可选：是否把字幕内嵌为 MKV，缺省使用设置项 embedSubtitles */
   embedSubtitles?: boolean;
@@ -270,6 +299,8 @@ export interface AppSettings {
   namingTemplate: string;
   maxConcurrent: number;
   defaultQn: number;
+  /** 默认音频质量 id（0 = 自动：仅音频时优先无损/杜比，视频时优先 192K AAC） */
+  defaultAudioQualityId: number;
   preferCodec: Codec;
   mergeWithFfmpeg: boolean;
   ffmpegPath: string;
@@ -342,6 +373,8 @@ export interface VideoResponse {
 
 export interface StreamsResponse {
   qualities: QualityOption[];
+  /** 可用音频质量列表（高 -> 低）；视频没有音频流时为空数组 */
+  audioQualities: AudioQualityOption[];
   selected: StreamDetail;
 }
 

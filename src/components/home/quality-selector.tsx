@@ -8,14 +8,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { revealDelay } from "@/components/shared/motion";
-import { CODEC_NAMES, QUALITY_LABELS } from "@/lib/constants";
-import type { Codec, QualityOption } from "@/lib/types";
+import { AUTO_AUDIO_QUALITY_LABEL, CODEC_NAMES, QUALITY_LABELS } from "@/lib/constants";
+import type { AudioQualityOption, Codec, QualityOption } from "@/lib/types";
 
 interface QualitySelectorProps {
   qualities: QualityOption[];
   codecChoices: Codec[];
+  /** 可用音频质量列表（高 -> 低） */
+  audioQualities: AudioQualityOption[];
   selectedQn: number | null;
   selectedCodec: Codec | null;
+  /** 当前选择的音频质量 id（0 = 自动） */
+  selectedAudioQualityId: number;
+  /** 实际选中的音频质量（来自取流响应） */
+  selectedAudioQuality: AudioQualityOption | null;
   audioOnly: boolean;
   embedSubtitles: boolean;
   embedDanmaku: boolean;
@@ -27,6 +33,7 @@ interface QualitySelectorProps {
   selectedPartCount?: number;
   onQnChange: (qn: number) => void;
   onCodecChange: (codec: Codec) => void;
+  onAudioQualityChange: (id: number) => void;
   onAudioOnlyChange: (value: boolean) => void;
   onEmbedSubtitlesChange: (value: boolean) => void;
   onEmbedDanmakuChange: (value: boolean) => void;
@@ -36,8 +43,11 @@ interface QualitySelectorProps {
 export function QualitySelector({
   qualities,
   codecChoices,
+  audioQualities,
   selectedQn,
   selectedCodec,
+  selectedAudioQualityId,
+  selectedAudioQuality,
   audioOnly,
   embedSubtitles,
   embedDanmaku,
@@ -49,6 +59,7 @@ export function QualitySelector({
   selectedPartCount = 0,
   onQnChange,
   onCodecChange,
+  onAudioQualityChange,
   onAudioOnlyChange,
   onEmbedSubtitlesChange,
   onEmbedDanmakuChange,
@@ -56,6 +67,8 @@ export function QualitySelector({
 }: QualitySelectorProps) {
   const showSkeleton = loading && qualities.length === 0;
   const selectDisabled = disabled || loading || audioOnly;
+  // 音频质量在仅音频模式下也是主选择，因此不跟随 audioOnly 禁用
+  const audioQualityDisabled = disabled || loading || audioQualities.length === 0;
 
   return (
     <Card>
@@ -64,11 +77,12 @@ export function QualitySelector({
           <SlidersHorizontal className="h-4 w-4" />
           下载选项
         </CardTitle>
-        <CardDescription>选择清晰度与编码，或只下载音频。</CardDescription>
+        <CardDescription>选择清晰度、编码与音频质量，或只下载音频。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {showSkeleton ? (
           <div className="space-y-2">
+            <Skeleton className="h-9 w-full" />
             <Skeleton className="h-9 w-full" />
             <Skeleton className="h-9 w-full" />
           </div>
@@ -120,6 +134,38 @@ export function QualitySelector({
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="audio-quality-select">音频质量</Label>
+              <Select
+                value={String(selectedAudioQualityId)}
+                onValueChange={(value) => onAudioQualityChange(Number(value))}
+                disabled={audioQualityDisabled}
+              >
+                <SelectTrigger id="audio-quality-select" className="w-full">
+                  <SelectValue
+                    placeholder={audioQualities.length === 0 ? "暂无可用音频质量" : "选择音频质量"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">{AUTO_AUDIO_QUALITY_LABEL}</SelectItem>
+                  {audioQualities.map((quality) => {
+                    const locked = quality.needsLogin && !isLogin;
+                    return (
+                      <SelectItem key={quality.id} value={String(quality.id)} disabled={locked}>
+                        {quality.label}
+                        {locked ? "（需登录/大会员）" : ""}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {selectedAudioQuality
+                  ? "实际音轨：" + selectedAudioQuality.label
+                  : "自动选择账号可用的最佳音轨"}
+              </p>
+            </div>
           </>
         )}
 
@@ -131,7 +177,7 @@ export function QualitySelector({
             <Label htmlFor="audio-only" className="text-sm font-medium">
               仅下载音频
             </Label>
-            <p className="text-xs text-muted-foreground">只保存音频流（m4a），不下载视频画面。</p>
+            <p className="text-xs text-muted-foreground">只保存音频流（M4A / FLAC），不下载视频画面。</p>
           </div>
           <Switch id="audio-only" checked={audioOnly} onCheckedChange={onAudioOnlyChange} disabled={disabled || loading} />
         </div>
@@ -201,7 +247,10 @@ export function QualitySelector({
         ) : null}
 
         {audioOnly ? (
-          <p className="text-xs text-muted-foreground">仅下载音频时忽略清晰度与编码设置，最终保存为 m4a。</p>
+          <p className="text-xs text-muted-foreground">
+            仅下载音频时以「音频质量」为准，清晰度与编码设置不生效。自动模式会优先选择账号可用的 Hi-Res 无损 /
+            杜比全景声：无损音轨保存为 FLAC，其余保存为 M4A。Hi-Res 无损与杜比全景声需要大会员。
+          </p>
         ) : null}
 
         {selectedPartCount > 1 ? (
@@ -216,7 +265,7 @@ export function QualitySelector({
             <Link href="/account" className="font-medium text-primary underline-offset-4 hover:underline">
               登录 B 站账号
             </Link>
-            后即可下载 1080P 及以上清晰度。
+            后即可下载 1080P 及以上清晰度；音频方面 132K/192K 需登录，Hi-Res 无损与杜比全景声需大会员。
           </p>
         ) : null}
       </CardContent>

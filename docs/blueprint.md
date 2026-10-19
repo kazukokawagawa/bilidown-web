@@ -46,7 +46,7 @@
 | Method & Path | 说明 | 响应 |
 |---|---|---|
 | GET /api/bili/video?input= | 解析输入（BV/av/链接/b23 短链/ep/ss）并取视频信息 | { input: ParsedInput, video: VideoInfo } |
-| GET /api/bili/streams?bvid=&cid=&qn= | 可用清晰度/编码 + DASH 播放流 | { qualities: QualityOption[], selected: StreamDetail } |
+| GET /api/bili/streams?bvid=&cid=&qn=&codec=&audioOnly=&audioQualityId= | 可用清晰度/编码/音频质量 + DASH 播放流 | { qualities: QualityOption[], audioQualities: AudioQualityOption[], selected: StreamDetail } |
 | GET /api/bili/search?keyword=&type=video或user&page=&order= | 搜索（WBI 签名，失败降级旧接口） | { items, page, total, hasMore } |
 | GET /api/bili/suggest?term= | 搜索联想 | { items: string[] } |
 | GET /api/bili/nav | 登录态 | { isLogin, user?: BiliUser } |
@@ -81,28 +81,29 @@
 ## 3. 类型契约（src/lib/types.ts，Lead 维护）
 
 - ParsedInput：{ type: 'bvid' | 'av' | 'b23' | 'ep' | 'ss' | 'url', bvid?, aid?, epId?, seasonId?, url? }
-- VideoInfo：bvid aid title cover desc duration pubdate owner{mid,name,face} stat{video,danmaku,reply,favorite,coin,share,like} pages[{cid,page,title,duration}] videos
+- VideoInfo：bvid aid title cover desc duration pubdate owner{mid,name,face} stat{video,danmaku,reply,favorite,coin,share,like} pages[{cid,page,title,duration}] videos collection；另含可选补充字段 tname? copyright? tags?（tags 仅单P解析时由服务端补充）
 - QualityOption：{ qn: number, label: string, codec: 'avc' | 'hevc' | 'av1', needsLogin: boolean }
-- StreamDetail：{ qn, label, video?: { url, backupUrls[], size?, bandwidth? }, audio?: { url, backupUrls[], size?, bandwidth? }, audioOnly }
+- AudioQualityOption：{ id: number, label: string, kind: 'aac' | 'dolby' | 'flac', bandwidth?: number, needsLogin: boolean }（0/缺省 = 自动）
+- StreamDetail：{ qn, label, video?: { url, backupUrls[], size?, bandwidth? }, audio?: { url, backupUrls[], size?, bandwidth? }, audioOnly, audioQuality?: AudioQualityOption }
 - TaskStatus：queued / downloading / merging / completed / error / paused / cancelled
-- DownloadTask：id bvid aid cid page title partTitle cover upName qn qualityName codec format status progress downloadedBytes totalBytes speed filePath fileName fileSize error createdAt updatedAt startedAt finishedAt sourceUrl audioOnly
-- AppSettings：downloadDir namingTemplate maxConcurrent defaultQn preferCodec mergeWithFfmpeg ffmpegPath cookie proxy theme clipboardWatch autoCheckUpdate saveTaskHistory deleteTempAfterMerge
+- DownloadTask：id bvid aid cid page title partTitle cover upName qn qualityName codec audioQualityId audioQualityName format(mp4/m4a/m4s/mkv/flac) status progress downloadedBytes totalBytes speed filePath fileName fileSize error createdAt updatedAt startedAt finishedAt sourceUrl audioOnly
+- AppSettings：downloadDir namingTemplate maxConcurrent defaultQn defaultAudioQualityId preferCodec mergeWithFfmpeg ffmpegPath cookie proxy theme clipboardWatch autoCheckUpdate saveTaskHistory deleteTempAfterMerge
 - PublicSettings：Omit<AppSettings, 'cookie'> & { loggedIn: boolean, cookiePreview?: { DedeUserID?: string } }
 - BiliCookie：{ SESSDATA?, bili_jct?, DedeUserID?, DedeUserID__ckMd5?, sid?, buvid3? }
 - BiliUser：{ mid, name, face, isLogin, vipStatus? }
 - SearchVideoItem：{ type:'video', bvid, aid, title, cover, author, mid, duration, play, danmaku, pubdate, description }
 - SearchUserItem：{ type:'user', mid, name, face, fans, videos, sign }
-- CreateTaskInput：{ bvid, aid, cid, page, title, partTitle, cover, upName, qn, codec, audioOnly, sourceUrl }
+- CreateTaskInput：{ bvid, aid, cid, page, title, partTitle, cover, upName, qn, codec, audioOnly, audioQualityId?, sourceUrl }
 
 ## 4. 下载引擎（backend 实现）
 
 - 单例 TaskManager 挂 globalThis（避免 dev 热更新重复实例）：内存 Map + 启动时从 data/tasks.json 恢复（downloading/merging 重置为 paused）。
 - 队列按 maxConcurrent 启动；每个 worker 独立 AbortController。
 - worker 步骤：
-  1. 用当前 settings.cookie 重新调 playurl（不信任客户端过期 URL），按 qn+codec 选流；
+  1. 用当前 settings.cookie 重新调 playurl（不信任客户端过期 URL），按 qn+codec 选视频流、按 audioQualityId 选音频流（0/缺省 = 自动：仅音频优先 Hi-Res 无损 > 杜比全景声 > 最佳 AAC，视频优先最佳 AAC > Hi-Res > 杜比；请求的音轨不可用时回退自动）；
   2. 下载 video/audio 到 downloads/.tmp/<taskId>/video.m4s 与 audio.m4s，fetch 带 Referer: https://www.bilibili.com、User-Agent、Cookie；支持 backupUrl 切换、Range 续传（resume）；
   3. 进度：Content-Length 计算 total，节流 500ms emit；速度用最近 2s 采样；
-  4. 合并：ffmpeg 可用且 mergeWithFfmpeg → ffmpeg -y -i video.m4s -i audio.m4s -c copy -movflags +faststart <final.mp4>；audioOnly → 直接保存 .m4a；ffmpeg 缺失 → 分别保存 <name>.video.m4s 与 <name>.audio.m4s 并标记 warning；
+  4. 合并：ffmpeg 可用且 mergeWithFfmpeg → ffmpeg -y -i video.m4s -i audio.m4s -c copy -movflags +faststart <final.mp4>；audioOnly → Hi-Res 无损转封装 .flac、其余直接保存 .m4a（FLAC 转封装失败或无 ffmpeg 时回退保存原始 .m4s 并在任务上提示）；视频任务音轨为杜比/Hi-Res 时合并为 MKV（MP4 兼容性差）；ffmpeg 缺失 → 分别保存 <name>.video.m4s 与 <name>.audio.m4s 并标记 warning；
   5. 按 namingTemplate 生成文件名（§4.1），移动到 downloadDir，status=completed；
   6. 失败 → error；cancel → 删除临时文件；pause → abort 保留临时文件（resume 续传）。
 - SSE：GET /api/tasks/events，25s 心跳；事件：{ type: 'init', tasks }（连接时）、{ type: 'task-updated', task }、{ type: 'task-deleted', id }。
@@ -113,6 +114,7 @@
      downloads/
      ├─ <视频标题>.mp4                # 单P
      ├─ <视频标题>/P1 <分P标题>.mp4    # 多P
+     ├─ <视频标题>.flac              # 仅音频 Hi-Res 无损
      └─ .tmp/<taskId>/video.m4s|audio.m4s
 
 ## 5. 前端页面规格
@@ -129,7 +131,7 @@
 
 1. 大输入框 + 解析按钮（支持 BV/AV/链接/b23 短链/ep/ss）；粘贴按钮（Clipboard API）；回车触发。
 2. 视频卡片：封面、标题、UP主、播放/点赞/收藏、简介、分P列表（默认第一P）。
-3. 清晰度 Select（/api/bili/streams；未登录高清置灰并提示登录）、编码 Select、仅下载音频 Switch。
+3. 清晰度 Select（/api/bili/streams；未登录高清置灰并提示登录）、编码 Select、音频质量 Select（自动 / Hi-Res 无损 / 杜比全景声 / 192K / 132K / 64K；杜比/Hi-Res 需大会员）、仅下载音频 Switch。
 4. 开始下载 → POST /api/tasks → toast + 跳转下载页；在线预览用官方 iframe：https://player.bilibili.com/player.html?bvid=<bvid>&page=<page>&high_quality=1&danmaku=0
 5. 底部最近任务 3 条（use-tasks 简单进度条）。
 
@@ -155,7 +157,7 @@
 
 ### 5.6 设置页 /settings（frontend-aux）
 
-- 下载：下载目录（Input/绝对路径 + 可写状态）、命名模板（占位符说明 + 实时预览）、最大并发 1-5、默认清晰度、优先编码、合并开关、ffmpeg 路径 + 检测状态（/api/system/info）。
+- 下载：下载目录（Input/绝对路径 + 可写状态）、命名模板（占位符说明 + 实时预览）、最大并发 1-5、默认清晰度、默认音频质量（0=自动）、优先编码、合并开关、ffmpeg 路径 + 检测状态（/api/system/info）。
 - 外观：主题 light/dark/system。
 - 行为：剪贴板监听开关（说明浏览器限制：仅聚焦时每 2s 读，需权限）、自动检查更新、任务历史保存、合并后删临时文件。
 - 网络：HTTP 代理（服务端下载用，留空禁用）。

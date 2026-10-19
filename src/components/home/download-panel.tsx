@@ -10,7 +10,14 @@ import { formatBytes } from "@/lib/format";
 import { collectSelectedItems, selectionKey } from "@/lib/selection";
 import { revealDelay } from "@/components/shared/motion";
 import { cn } from "@/lib/utils";
-import type { Codec, CollectionEpisode, StreamDetail, VideoInfo, VideoPage } from "@/lib/types";
+import type {
+  AudioQualityOption,
+  Codec,
+  CollectionEpisode,
+  StreamDetail,
+  VideoInfo,
+  VideoPage,
+} from "@/lib/types";
 
 function playerUrl(bvid: string, page: number): string {
   return (
@@ -59,6 +66,8 @@ interface DownloadPanelProps {
   collectionTitle?: string | null;
   qn: number | null;
   codec: Codec | null;
+  /** 实际选中的音频质量（无音轨时为 null） */
+  audioQuality: AudioQualityOption | null;
   audioOnly: boolean;
   embedSubtitles: boolean;
   embedDanmaku: boolean;
@@ -81,6 +90,7 @@ export function DownloadPanel({
   collectionTitle,
   qn,
   codec,
+  audioQuality,
   audioOnly,
   embedSubtitles,
   embedDanmaku,
@@ -103,6 +113,8 @@ export function DownloadPanel({
   const qualityName =
     stream?.label || (qn !== null ? QUALITY_LABELS[qn] ?? String(qn) : "未知");
   const codecName = codec ? CODEC_NAMES[codec] : "未知";
+  // 音频质量：始终展示流实际选中的音轨；未知时回退「自动」。
+  const audioQualityName = audioQuality?.label ?? "自动";
   const audioSize = stream?.audio?.size ?? 0;
   const videoSize = stream?.video?.size ?? 0;
   const singleItemSize = audioOnly ? audioSize : audioSize + videoSize;
@@ -141,11 +153,21 @@ export function DownloadPanel({
         ? "约 " + formatBytes(totalSize) + "（" + countText(selectedCount, pages, episodes) + "）"
         : (singleExact ? "" : "约 ") + formatBytes(totalSize)
       : "未知";
+  // 容器格式：Hi-Res 无损 / 杜比全景声音轨需要 MKV 封装；仅音频时无损音轨保存为 FLAC。
+  const audioTrackKind = audioQuality?.kind ?? "aac";
+  const embedToMkv = (embedSubtitles || embedDanmaku) && ffmpegAvailable;
+  const audioTrackName = audioTrackKind === "flac" ? "无损" : audioTrackKind === "dolby" ? "杜比全景声" : "";
   const formatText = audioOnly
-    ? "M4A 音频"
-    : (embedSubtitles || embedDanmaku) && ffmpegAvailable
-      ? "MKV 视频（可含内嵌字幕/弹幕）"
-      : "MP4 视频";
+    ? audioTrackKind === "flac"
+      ? "FLAC 无损音频"
+      : audioTrackKind === "dolby"
+        ? "M4A 音频（杜比全景声）"
+        : "M4A 音频"
+    : audioTrackKind !== "aac"
+      ? "MKV 视频（含" + audioTrackName + "音轨" + (embedToMkv ? "，可内嵌字幕/弹幕" : "") + "）"
+      : embedToMkv
+        ? "MKV 视频（可含内嵌字幕/弹幕）"
+        : "MP4 视频";
   const downloadLabel = selectedCount > 1 ? "开始下载（" + String(selectedCount) + " 个任务）" : "开始下载";
 
   // 只有「列表批量」才会建子文件夹：合集多集，或多P视频勾选分P。
@@ -175,8 +197,9 @@ export function DownloadPanel({
           {danmakuTexts.length > 0 ? <SummaryRow label="弹幕" value={danmakuTexts.join("；")} index={3} /> : null}
           <SummaryRow label="清晰度" value={qualityName} index={4} />
           <SummaryRow label="编码" value={audioOnly ? "仅音频" : codecName} index={5} />
-          <SummaryRow label="格式" value={formatText} index={6} />
-          <SummaryRow label={selectedCount > 1 ? "预计总大小" : "预计大小"} value={sizeText} index={7} />
+          <SummaryRow label="音频质量" value={audioQualityName} index={6} />
+          <SummaryRow label="格式" value={formatText} index={7} />
+          <SummaryRow label={selectedCount > 1 ? "预计总大小" : "预计大小"} value={sizeText} index={8} />
         </div>
 
         <Button

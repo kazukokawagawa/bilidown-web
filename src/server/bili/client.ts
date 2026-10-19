@@ -1,14 +1,19 @@
 import {
+  AUDIO_QUALITY_LABELS,
+  AUDIO_QUALITY_RANK,
   BILI_API,
   BILI_ORIGIN,
   BILI_REFERER,
   BILI_USER_AGENT,
   CODEC_BY_ID,
+  LOGIN_REQUIRED_AUDIO_IDS,
   LOGIN_REQUIRED_QN,
   QUALITY_LABELS,
 } from "@/lib/constants";
 import { stripHtml } from "@/lib/format";
 import type {
+  AudioQualityKind,
+  AudioQualityOption,
   BiliCookie,
   BiliUser,
   Codec,
@@ -525,6 +530,8 @@ interface RawViewData {
   aid?: number;
   cid?: number;
   title?: string;
+  tname?: string;
+  copyright?: number;
   pic?: string;
   desc?: string;
   duration?: number;
@@ -620,6 +627,8 @@ export async function getVideoInfo(id: VideoId, cookie?: BiliCookie): Promise<Vi
     bvid,
     aid: numOr(data.aid, id.aid ?? 0),
     title: strOr(data.title, bvid),
+    tname: strOr(data.tname, ""),
+    copyright: numOr(data.copyright, 0),
     cover: normalizeImageUrl(data.pic),
     desc: strOr(data.desc, ""),
     duration: numOr(data.duration, 0),
@@ -638,6 +647,39 @@ export async function getVideoInfo(id: VideoId, cookie?: BiliCookie): Promise<Vi
       cid: numOr(data.cid, pages[0]?.cid ?? 0),
     }),
   };
+}
+
+/* ---------------------------------------------------------------- 视频标签 */
+
+interface RawTagItem {
+  tag_id?: number;
+  tag_name?: string;
+}
+
+const MAX_VIDEO_TAGS = 20;
+
+/**
+ * 获取视频标签（/x/tag/archive/tags）。
+ * 接口返回码非 0 或 data 不是数组时返回空数组；网络/HTTP 错误交给调用方捕获处理。
+ */
+export async function getVideoTags(bvid: string, cookie?: BiliCookie): Promise<string[]> {
+  if (!bvid) return [];
+  const envelope = await fetchBiliJson<RawTagItem[]>(
+    BILI_API.tags + "?bvid=" + encodeURIComponent(bvid),
+    cookie,
+  );
+  if (envelope.code !== 0 || !Array.isArray(envelope.data)) return [];
+  const tags: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of envelope.data) {
+    if (!isRecord(raw)) continue;
+    const name = strOr(raw.tag_name, "").trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    tags.push(name);
+    if (tags.length >= MAX_VIDEO_TAGS) break;
+  }
+  return tags;
 }
 
 /* ---------------------------------------------------------------- 播放流 */
@@ -686,6 +728,8 @@ export interface PlayStreamsRequest {
   qn?: number;
   codec?: Codec;
   audioOnly?: boolean;
+  /** 期望的音频质量 id（0/undefined = 自动：按任务类型与登录权限选择最佳音轨）。 */
+  audioQualityId?: number;
   cookie?: BiliCookie;
   /** 视频时长（秒），用于估算文件大小；不传则用 dash.duration。 */
   duration?: number;
@@ -717,6 +761,20 @@ function normalizeDashEntry(entry: RawDashEntry | null | undefined): NormalizedM
   };
 }
 
+/** 规范化后的音频流候选：在通用媒体字段上附带音频种类（AAC / 杜比全景声 / Hi-Res 无损）。 */
+interface NormalizedAudio extends NormalizedMedia {
+  kind: AudioQualityKind;
+}
+
+/** 把 dash 音频条目规范化成带种类的音频候选（无有效地址返回 null）。 */
+function normalizeAudioEntry(
+  entry: RawDashEntry | null | undefined,
+  kind: AudioQualityKind,
+): NormalizedAudio | null {
+  const media = normalizeDashEntry(entry);
+  return media ? { ...media, kind } : null;
+}
+
 function dedupeMedia(items: NormalizedMedia[]): NormalizedMedia[] {
   const seen = new Set<string>();
   const result: NormalizedMedia[] = [];
@@ -741,9 +799,81 @@ function pickVideo(videos: NormalizedMedia[], qn?: number, codec?: Codec): Norma
   return [...pool].sort((a, b) => b.bandwidth - a.bandwidth)[0];
 }
 
-function pickBestAudio(audios: NormalizedMedia[]): NormalizedMedia | undefined {
+/** 音频质量排序权重：已知 id 按 AUDIO_QUALITY_RANK，未知 id 统一排最后。 */
+function audioRank(id: number): number {
+  return AUDIO_QUALITY_RANK[id] ?? Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * 按音质从高到低排序（未知 id 排后，同权重时 id 大的优先）。
+ * 注意：实测 B 站 bandwidth 字段不可靠（例如 30216 的 bandwidth 可能比 30280 大），
+ * 因此音频排序统一使用 AUDIO_QUALITY_RANK 而不是 bandwidth。
+ */
+function sortAudios(audios: NormalizedAudio[]): NormalizedAudio[] {
+  return [...audios].sort((a, b) => audioRank(a.qn) - audioRank(b.qn) || b.qn - a.qn);
+}
+
+/** 按音频流 id 去重（保留接口返回顺序中的第一个）。 */
+function dedupeAudios(audios: NormalizedAudio[]): NormalizedAudio[] {
+  const seen = new Set<number>();
+  const result: NormalizedAudio[] = [];
+  for (const audio of audios) {
+    if (seen.has(audio.qn)) continue;
+    seen.add(audio.qn);
+    result.push(audio);
+  }
+  return result;
+}
+
+/** 把音频候选映射为前端可选的质量选项（高 -> 低）。 */
+function toAudioQualityOption(audio: NormalizedAudio, loggedIn: boolean): AudioQualityOption {
+  return {
+    id: audio.qn,
+    label: AUDIO_QUALITY_LABELS[audio.qn] ?? "音频 " + audio.qn,
+    kind: audio.kind,
+    bandwidth: audio.bandwidth > 0 ? audio.bandwidth : undefined,
+    needsLogin: LOGIN_REQUIRED_AUDIO_IDS.includes(audio.qn) && !loggedIn,
+  };
+}
+
+/** 构建可用音频质量列表：按 id 去重后按音质排序（未知 id 排后、按 id 降序）。 */
+function buildAudioQualities(candidates: NormalizedAudio[], loggedIn: boolean): AudioQualityOption[] {
+  return sortAudios(dedupeAudios(candidates)).map((audio) => toAudioQualityOption(audio, loggedIn));
+}
+
+/** 按种类优先级取最佳音轨（同类内按音质排名取第一个）。 */
+function pickAudioByKinds(
+  audios: NormalizedAudio[],
+  kinds: AudioQualityKind[],
+): NormalizedAudio | undefined {
+  const ordered = sortAudios(audios);
+  for (const kind of kinds) {
+    const found = ordered.find((audio) => audio.kind === kind);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/**
+ * 选择实际下载的音频流。
+ * - 请求 audioQualityId > 0 时优先精确匹配该音轨；找不到（未登录/无权限/视频没有该音轨）回退自动。
+ * - 自动选择：仅音频模式 Hi-Res 无损 > 杜比全景声 > 最佳 AAC（保持原有“优先高音质”行为）；
+ *   视频模式最佳 AAC > Hi-Res 无损 > 杜比全景声（保持原有默认行为）。
+ */
+function pickAudio(
+  candidates: NormalizedAudio[],
+  options: { audioQualityId?: number; audioOnly?: boolean },
+): NormalizedAudio | undefined {
+  const audios = dedupeAudios(candidates);
   if (!audios.length) return undefined;
-  return [...audios].sort((a, b) => b.bandwidth - a.bandwidth)[0];
+  const requestedId = options.audioQualityId;
+  if (requestedId && requestedId > 0) {
+    const matched = audios.find((audio) => audio.qn === requestedId);
+    if (matched) return matched;
+  }
+  return options.audioOnly
+    ? pickAudioByKinds(audios, ["flac", "dolby", "aac"])
+    : pickAudioByKinds(audios, ["aac", "flac", "dolby"]);
 }
 
 function buildQualities(
@@ -844,25 +974,24 @@ export async function getPlayStreams(req: PlayStreamsRequest): Promise<StreamsRe
     }
   }
 
-  // 音频候选优先级：Hi-Res FLAC > 杜比全景声 > 普通 AAC
-  const normalAudios: NormalizedMedia[] = [];
+  // 音频候选：普通 AAC / 杜比全景声 / Hi-Res 无损分别规范化后合并（选择统一按音质排名）
+  const audioCandidates: NormalizedAudio[] = [];
   for (const entry of data.dash.audio ?? []) {
-    const media = normalizeDashEntry(entry);
-    if (media) normalAudios.push(media);
+    const media = normalizeAudioEntry(entry, "aac");
+    if (media) audioCandidates.push(media);
   }
-  const dolbyAudios: NormalizedMedia[] = [];
   for (const entry of data.dash.dolby?.audio ?? []) {
-    const media = normalizeDashEntry(entry);
-    if (media) dolbyAudios.push(media);
+    const media = normalizeAudioEntry(entry, "dolby");
+    if (media) audioCandidates.push(media);
   }
-  const flacAudio = normalizeDashEntry(data.dash.flac?.audio);
+  const flacAudio = normalizeAudioEntry(data.dash.flac?.audio, "flac");
+  if (flacAudio) audioCandidates.push(flacAudio);
 
   const duration = req.duration && req.duration > 0 ? req.duration : numOr(data.dash.duration, 0);
   const qualities = buildQualities(videos, data.accept_quality, loggedIn);
   const video = pickVideo(videos, req.qn, req.codec);
-  const audio = req.audioOnly
-    ? flacAudio ?? pickBestAudio(dolbyAudios) ?? pickBestAudio(normalAudios)
-    : pickBestAudio(normalAudios) ?? flacAudio ?? pickBestAudio(dolbyAudios);
+  const audioQualities = buildAudioQualities(audioCandidates, loggedIn);
+  const audio = pickAudio(audioCandidates, { audioQualityId: req.audioQualityId, audioOnly: req.audioOnly });
   if (!video && !audio) {
     throw new BiliApiError("该视频没有可用的播放流（可能是付费/充电专属视频）", {
       status: 422,
@@ -878,8 +1007,9 @@ export async function getPlayStreams(req: PlayStreamsRequest): Promise<StreamsRe
     video: video ? toStreamSource(video, duration) : undefined,
     audio: audio ? toStreamSource(audio, duration) : undefined,
     audioOnly: Boolean(req.audioOnly),
+    audioQuality: audio ? toAudioQualityOption(audio, loggedIn) : undefined,
   };
-  return { qualities, selected };
+  return { qualities, audioQualities, selected };
 }
 
 /* ---------------------------------------------------------------- 搜索 */

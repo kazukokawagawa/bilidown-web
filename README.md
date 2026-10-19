@@ -69,22 +69,22 @@ npm run electron:build
 
 | 路由 | 功能 |
 |---|---|
-| `/` 首页 | 解析任意输入（BV/av/链接/b23 短链/ep/ss）→ 展示视频信息、封面、UP主、统计、**分P列表、合集（ugc_season）与番剧 season 剧集列表（正片 + PV/预告等小节）** → 勾选分P/合集/剧集批量下载（**多选时下载面板按各条目时长汇总「预计总大小」**）、清晰度、编码（AVC/HEVC/AV1）、仅音频、**内嵌弹幕 / 单独保存弹幕文件** → 批量创建下载任务（列表下载按列表名建子文件夹）；官方 iframe 在线预览；最近任务 |
+| `/` 首页 | 解析任意输入（BV/av/链接/b23 短链/ep/ss）→ 展示视频信息、封面、UP主、统计、**分P列表、合集（ugc_season）与番剧 season 剧集列表（正片 + PV/预告等小节）** → 勾选分P/合集/剧集批量下载（**多选时下载面板按各条目时长汇总「预计总大小」**）、清晰度、编码（AVC/HEVC/AV1）、**音频质量（自动 / Hi-Res 无损 / 杜比全景声 / 192K / 132K / 64K）**、仅音频、**内嵌弹幕 / 单独保存弹幕文件** → 批量创建下载任务（列表下载按列表名建子文件夹）；官方 iframe 在线预览；**单P视频（无分P/合集列表）左栏展示完整详情卡：完整简介、全部数据、视频参数、B站标签与下载提示，卡片与右栏底部对齐不留空白**；最近任务 |
 | `/search` 搜索 | **增强功能**（原桌面版没有关键词搜索接口）：B站关键词搜索（视频/UP主、排序、分页）；搜索不可用时可直接回首页粘贴链接 |
 | `/downloads` 下载 | 任务统计 + 状态 Tabs；实时进度（SSE）、速度、剩余时间；暂停/继续/取消/重试/删除；下载文件、复制路径；**列表名 / 内嵌弹幕 / 弹幕文件徽标与弹幕数量、弹幕文件夹路径**；**服务端无 ffmpeg 时的「浏览器合并」（ffmpeg.wasm，手机网页端可用）与音视频分片单独下载**；导出/导入 JSON、清理已完成、清空全部 |
 | `/account` 账号 | B站扫码登录（服务端保存 Cookie）、用户信息、退出登录；登录后可下载 1080P+ 等高清清晰度 |
-| `/settings` 设置 | 下载目录、命名模板、最大并发、默认清晰度、优先编码、ffmpeg 检测、合并开关、字幕内嵌、**列表单独文件夹、弹幕内嵌、单独保存弹幕、弹幕字号/不透明度**、主题（浅色/深色/跟随系统）、剪贴板监听、自动检查更新、代理、清空记录/恢复默认 |
+| `/settings` 设置 | 下载目录、命名模板、最大并发、默认清晰度、**默认音频质量**、优先编码、ffmpeg 检测、合并开关、字幕内嵌、**列表单独文件夹、弹幕内嵌、单独保存弹幕、弹幕字号/不透明度**、主题（浅色/深色/跟随系统）、剪贴板监听、自动检查更新、代理、清空记录/恢复默认 |
 | `/tools` 工具 | 链接解析、BV ⇄ AV 互转、CC 字幕 JSON → SRT、SRT → 纯文本、封面提取、音频转 MP3、音视频手动混流、正则测试 |
 
 ### 下载流程（与原版对应）
 
 1. 解析输入 → `/api/bili/video`（`/x/web-interface/view`）
-2. 取流 → `/api/bili/streams`（`/x/player/playurl?fnval=4048&fourk=1&fnver=0`，解析 DASH video/audio，支持 112/116 补拉、Hi-Res/杜比音频）
+2. 取流 → `/api/bili/streams`（`/x/player/playurl?fnval=4048&fourk=1&fnver=0`，解析 DASH video/audio，支持 112/116 补拉、Hi-Res/杜比音频；audioQualityId 指定音频质量，0 表示自动）
 3. 建任务 → `POST /api/tasks`，服务端下载引擎：
    - 用当前登录 Cookie 重新取流（不信任过期直链）
    - 流式下载 video/audio 到 `downloads/.tmp/<taskId>/`，支持 backupUrl 切换、Range 续传、暂停/取消
    - 需要时拉取 B 站 CC 字幕（SRT）与弹幕 XML，弹幕转 ASS；`ffmpeg` 合并音视频并把字幕/弹幕封装为 MKV 软字幕轨道（无 ffmpeg 时回退 MP4/M4A）
-   - `ffmpeg -y -i video.m4s -i audio.m4s -c copy -movflags +faststart <name>.mp4` 合并（仅音频则直接保存 .m4a）
+   - `ffmpeg -y -i video.m4s -i audio.m4s -c copy -movflags +faststart <name>.mp4` 合并（仅音频则直接保存 .m4a；选 Hi-Res 无损音轨时转封装为 .flac，无 ffmpeg/转封装失败时回退保存 .m4s 并提示）
    - 服务端没有 ffmpeg（或设置里关闭了合并）时，任务输出 `<name>.video.m4s` + `<name>.audio.m4s`（`format=m4s`）；下载页任务行提供「浏览器合并」：从 `/api/tasks/[id]/file?part=video|audio` 取回分片，在浏览器内用 ffmpeg.wasm `-c copy` 合成 MP4（容器不支持时自动回退 MKV）并直接保存到设备
    - 按命名模板落盘；列表（合集/多P）任务按列表名建子文件夹；勾选「单独保存弹幕文件」时把 XML/ASS 写入同目录的 `弹幕/` 子文件夹
    - 更新任务状态与 `data/tasks.json`
@@ -95,13 +95,23 @@ npm run electron:build
 - 首页解析出**合集（ugc_season）**时展示「合集列表」，可勾选/全选剧集；多P视频展示「分P 列表」。分P与合集选择会合并去重后批量创建任务。
 - 下载面板的「预计大小」随勾选实时计算：单条时显示该条目预估体积；**多选时按主分P码率（bandwidth/8）× 各条目时长累加，显示「预计总大小 约 X（N 集 / N 个分P）」**，切换清晰度或增删选集都会更新；分P与剧集重复勾选按 bvid:cid:page 去重（与批量建任务数量一致）。
 - 任务携带 `listTitle` / `listIndex`：默认（设置页「列表下载单独文件夹」开启）落在 `<下载目录>/<列表名>/P<序号> <标题>.<ext>`，关闭后直接落下载目录。
+- 单P视频（没有多P列表、也不是多集合集/番剧）在首页左栏展示「视频详情」卡：完整简介（视频卡只显示 3 行摘要）、全部互动数据、视频类型/版权/BV/av/分P/发布时间等参数、B站视频标签与下载提示；卡片在 `lg` 下拉满左栏高度、内容区内部滚动，与右栏「下载选项 + 开始下载」底部对齐，避免大片空白。
 - 「内嵌弹幕」把弹幕 XML 转成 ASS 并作为 MKV 的软字幕轨道封装（不重编码，播放器可开关）；「单独保存弹幕文件」把同一份 XML 与 ASS 保存到视频同目录的 `弹幕/` 子文件夹。
 - 弹幕字号、不透明度在设置页配置；弹幕接口失败或无弹幕时任务仍正常完成，并在任务上给出提示。
+
+### 音频质量（Hi-Res 无损 / 杜比全景声）
+
+- 首页「下载选项」新增「音频质量」下拉，选项来自本次取流接口返回的 DASH 音频流：普通 AAC（30280=192K / 30232=132K / 30216=64K）、杜比全景声（30250，`dash.dolby.audio`）、Hi-Res 无损（30251，`dash.flac.audio`）；杜比与 Hi-Res 需要大会员，普通 AAC 按接口实际返回展示（游客也可能拿到 132K/192K，不做静态置灰）。
+- 选择「自动（最佳音质）」时：仅音频模式优先 Hi-Res 无损 > 杜比全景声 > 最佳 AAC；视频模式优先最佳 AAC（保持原默认行为，避免默认把无损音轨封装进 MP4）。也可显式指定任一可用音轨；请求的音轨不可用时自动回退。
+- 切换「音频质量」或「仅下载音频」会立即按当前清晰度/编码重新取流，下载面板的「实际音轨」与「预计大小」同步刷新；设置页可配置「默认音频质量」（0=自动）。
+- 输出规则：仅音频 + Hi-Res 无损 → `.flac`（ffmpeg 转封装；失败或无 ffmpeg 时保存原始 `.m4s` 分片并在任务上提示）；仅音频 + AAC/杜比 → `.m4a`；视频任务选择杜比/Hi-Res 音轨时自动封装为 `.mkv`（兼容性更好），普通 AAC 仍为 `.mp4`。
+- 任务记录 `audioQualityId` / `audioQualityName`：下载页元信息显示「仅音频 · 192K」，视频任务使用杜比/Hi-Res 音轨时显示「音轨 · Hi-Res 无损」徽标；旧任务与导入任务缺少字段时按「自动/空」兼容。
 
 ```text
 downloads/
 ├─ 单视频.mp4
 ├─ 单视频.mkv                      # 内嵌字幕/弹幕
+├─ 单视频.flac                     # 仅音频 Hi-Res 无损
 └─ 合集名/
    ├─ P1 第1集.mp4
    ├─ P2 第2集.mkv                 # 内嵌弹幕
@@ -238,6 +248,9 @@ bilidown-web/
 - 浏览器端「音频转 MP3」暂未迁移到 WASM：服务端没有 ffmpeg 时该工具不可用（手动混流已支持浏览器端）。
 - `@ffmpeg/core` 的许可证为 GPL-2.0-or-later（`@ffmpeg/ffmpeg` 为 MIT）；`public/ffmpeg` 是构建时从 `node_modules` 生成的产物、不纳入 git，但打包/再分发安装包时需遵守其许可证。
 - 番剧剧集列表来自 `pgc/view/web/season`：可下载清晰度与权限跟随当前登录账号（大会员/付费/地区限制与网页端一致）；PV/预告等小节会作为独立小节列出，批量全选时也会一并创建任务，可按需取消勾选。
+- 杜比全景声 / Hi-Res 无损音频需要大会员：接口未返回对应音轨时下拉中不会出现，显式请求不可用音轨会自动回退到自动选择。
+- 仅音频选择 Hi-Res 无损时默认输出 `.flac`（需要服务端 ffmpeg 转封装）；ffmpeg 不可用或转封装失败会保存原始 `.m4s` 分片并给出提示，不会生成伪 `.flac` 文件。
+- 视频任务选择杜比全景声 / Hi-Res 无损音轨时输出容器自动改为 `.mkv`（MP4 对这类音轨兼容性差），与内嵌字幕/弹幕触发的 MKV 行为一致。
 
 ## 验证记录（合集批量 / 列表文件夹 / 弹幕功能）
 
@@ -288,6 +301,19 @@ bilidown-web/
 - 生产包回归（standalone 3100 重启后）：首页 200、`/api/bili/video?input=ep693247` 返回 12 集正片 + PV；实测单集 247.5 MB、全选 13 集「约 2.9 GB（13 集）」、单视频 39.1 MB，无 console error。
 
 ![多选剧集时下载面板显示预计总大小](screenshots/multi-select-total-size.png)
+
+## 验证记录（音频下载质量选择）
+
+- 静态检查：`npx tsc --noEmit` 通过、`npx eslint`（改动文件）0 错误、`npm run build`（Next 16 + Turbopack）通过并生成 standalone 产物。
+- 接口（真实登录态）：`GET /api/bili/streams?bvid=BV1mh4y1C7iQ&cid=1223345661` 返回 `audioQualities = [30251 Hi-Res 无损(flac), 30280 192K, 30232 132K, 30216 64K]`；视频模式默认 `selected.audioQuality=30280`，`audioOnly=1` 自动为 `30251`，`audioOnly=1&audioQualityId=30216` 精确命中，请求不存在的 `audioQualityId=30250` 回退自动，`audioQualityId=abc` → 400；杜比视频 `BV1kX4y197P4` 返回 `30250(dolby)` 且仅音频自动选中；游客 playurl 仍返回 30232/30280 且 CDN Range 206，因此 132K/192K 不做静态登录置灰（仅杜比/Hi-Res 标记需登录/大会员）。
+- 生产模式落盘 E2E（`node scripts/start-standalone.mjs --port 3100`，ffmpeg 9.0.1）：
+  - 仅音频 + 30216：`format=m4a`、任务 `audioQualityId=30216/audioQualityName=64K`，`ffprobe` = aac，1,747,939 B；
+  - 仅音频 + 自动：解析为 30251，输出 `.flac`（58,962,477 B，`ffprobe` format=flac、codec=flac 48kHz/2ch）；
+  - 480P 视频 + 30251：输出 `.mkv`（h264 + flac + 内嵌字幕/弹幕），63,882,021 B；
+  - 模拟无 ffmpeg（设置页 ffmpegPath 指向不存在路径）：Hi-Res 仅音频任务回退 `format=m4s`、文件 `.m4s`，任务提示「未检测到可用的 ffmpeg，无法把 Hi-Res 无损音轨转封装为 FLAC，已保存原始 m4s 分片」；恢复设置后再次验证正常。
+- UI（生产 standalone + headless Edge Playwright 受控场景）：首页填 BV → 回车后约 1.1s 出现「音频质量」下拉；下拉选项为自动（最佳音质）/ Hi-Res 无损 / 192K / 132K / 64K（杜比视频额外出现杜比全景声），下方显示「实际音轨：192K」；打开「仅下载音频」后重新取流、自动音轨变为 Hi-Res 无损、下载面板格式提示 FLAC 无损音频；无页面错误。截图见 `screenshots/audio-quality.png`、`screenshots/audio-quality-audio-only.png`。
+- 独立验收：另起验收角色对契约/选择语义/边界/下载输出/前端联动做只读审查 + GET API 断言，结论通过（无 blocker）；其提出的两个非阻塞问题已在最终版本修复：杜比/Hi-Res 之外不再静态置灰 132K/192K；FLAC 转封装失败不再伪装 `.flac`。
+- 回归：原有 64K/192K AAC 选择、视频默认 192K AAC、内嵌字幕/弹幕 MKV 流程不变；测试后已删除测试任务与文件，`data/tasks.json` 中原有任务保留、设置已恢复。
 
 ## 相关文档
 
