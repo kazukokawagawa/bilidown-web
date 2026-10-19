@@ -50,3 +50,4 @@ next-env.d.ts
 
 # 浏览器端 ffmpeg.wasm 静态资源（由 scripts/prepare-ffmpeg-wasm.mjs 从 node_modules 生成）
 /public/ffmpeg/
+.workbuddy/*

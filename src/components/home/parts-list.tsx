@@ -10,6 +10,8 @@ import type { VideoPage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface PartsListProps {
+  /** lg 下拉满父级剩余高度：用于填满左栏底部空白（列表内部滚动） */
+  fill?: boolean;
   pages: VideoPage[];
   selectedPages: number[];
   disabled?: boolean;
@@ -17,36 +19,49 @@ interface PartsListProps {
   onToggleAll: (checked: boolean) => void;
 }
 
-export function PartsList({ pages, selectedPages, disabled, onToggle, onToggleAll }: PartsListProps) {
+export function PartsList({ pages, selectedPages, disabled, onToggle, onToggleAll, fill }: PartsListProps) {
   if (pages.length <= 1) return null;
   const allSelected = selectedPages.length === pages.length;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Layers className="h-4 w-4" />
+    <Card className={cn("flex min-h-0 flex-col", fill && "lg:flex-1")}>
+      <CardHeader className="shrink-0">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="flex min-w-0 items-center gap-2 text-base">
+              <Layers className="h-4 w-4 shrink-0" />
               分P 列表（{pages.length}）
             </CardTitle>
-            <CardDescription>勾选要下载的分P，可一次批量创建多个下载任务。</CardDescription>
+            {/* 全选控件固定不换行，单独占一行右侧，避免计数被拆行 */}
+            <div className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-2.5 py-1.5">
+              <Checkbox
+                id="select-all-parts"
+                checked={allSelected}
+                onCheckedChange={(checked) => onToggleAll(checked === true)}
+                disabled={disabled}
+              />
+              <label
+                htmlFor="select-all-parts"
+                title="全选 / 取消全选"
+                className="cursor-pointer select-none whitespace-nowrap text-xs font-medium"
+              >
+                全选
+                <span className="ml-1.5 font-normal text-muted-foreground tabular-nums">
+                  已选 {selectedPages.length}/{pages.length}
+                </span>
+              </label>
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Checkbox
-              id="select-all-parts"
-              checked={allSelected}
-              onCheckedChange={(checked) => onToggleAll(checked === true)}
-              disabled={disabled}
-            />
-            <label htmlFor="select-all-parts" className="cursor-pointer select-none">
-              全选 / 取消全选（已选 {selectedPages.length} / {pages.length}）
-            </label>
-          </div>
+          <CardDescription>勾选要下载的分P，可一次批量创建多个下载任务。</CardDescription>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="max-h-80 overflow-y-auto pr-1">
+      <CardContent className={cn("flex flex-col", fill && "lg:min-h-0 lg:flex-1")}>
+        <div
+          className={cn(
+            "scroll-area max-h-80 min-h-0 overflow-y-auto pr-1",
+            fill && "lg:max-h-none lg:flex-1 lg:[contain:size]",
+          )}
+        >
           <div className="grid gap-2 sm:grid-cols-2">
             {pages.map((page) => {
               const checked = selectedPages.includes(page.page);

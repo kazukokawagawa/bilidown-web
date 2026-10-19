@@ -68,7 +68,7 @@ export function TasksToolbar({ totalCount, completedCount, onChanged }: TasksToo
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
       <input
         ref={fileInputRef}
         type="file"

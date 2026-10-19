@@ -34,6 +34,8 @@ function buildSectionRows(sections: CollectionSection[]): SectionRows[] {
 }
 
 interface CollectionListProps {
+  /** lg 下拉满父级剩余高度：用于填满左栏底部空白（列表内部滚动） */
+  fill?: boolean;
   /** 合集/番剧标题（用于说明文案与列表文件夹名提示） */
   title: string;
   sections: CollectionSection[];
@@ -56,6 +58,7 @@ export function CollectionList({
   disabled,
   onToggle,
   onToggleAll,
+  fill,
 }: CollectionListProps) {
   const isBangumi = source === "pgc";
   const sectionRows = buildSectionRows(sections);
@@ -71,35 +74,49 @@ export function CollectionList({
   const allSelected = selectedCount === total;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ListVideo className="h-4 w-4" />
+    <Card className={cn("flex min-h-0 flex-col", fill && "lg:flex-1")}>
+      <CardHeader className="shrink-0">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="flex min-w-0 items-center gap-2 text-base">
+              <ListVideo className="h-4 w-4 shrink-0" />
               {isBangumi ? "剧集列表" : "合集列表"}（{total}）
             </CardTitle>
-            <CardDescription>
-              {title ? <span className="font-medium text-foreground">{title}</span> : null}
-              {title ? " · " : ""}
-              可批量勾选，下载时按{isBangumi ? "番剧名" : "合集名"}建子文件夹。
-            </CardDescription>
+            {/* 全选控件固定不换行，单独占一行右侧，避免「已选 1 /」被拆行 */}
+            <div className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-2.5 py-1.5">
+              <Checkbox
+                id="select-all-collection"
+                checked={allSelected}
+                onCheckedChange={(checked) => onToggleAll(checked === true)}
+                disabled={disabled}
+              />
+              <label
+                htmlFor="select-all-collection"
+                title="全选 / 取消全选"
+                className="cursor-pointer select-none whitespace-nowrap text-xs font-medium"
+              >
+                全选
+                <span className="ml-1.5 font-normal text-muted-foreground tabular-nums">
+                  已选 {selectedCount}/{total}
+                </span>
+              </label>
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Checkbox
-              id="select-all-collection"
-              checked={allSelected}
-              onCheckedChange={(checked) => onToggleAll(checked === true)}
-              disabled={disabled}
-            />
-            <label htmlFor="select-all-collection" className="cursor-pointer select-none">
-              全选 / 取消全选（已选 {selectedCount} / {total}）
-            </label>
-          </div>
+          <CardDescription>
+            {title ? <span className="font-medium text-foreground">{title}</span> : null}
+            {title ? " · " : ""}
+            可批量勾选，下载时按{isBangumi ? "番剧名" : "合集名"}建子文件夹。
+          </CardDescription>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
+      <CardContent className={cn("flex flex-col", fill && "lg:min-h-0 lg:flex-1")}>
+        {/* fill 时用 contain:size 让滚动区只占剩余高度，不把卡片撑高；小屏仍限制为 max-h-96 */}
+        <div
+          className={cn(
+            "scroll-area max-h-96 min-h-0 space-y-3 overflow-y-auto pr-1",
+            fill && "lg:max-h-none lg:flex-1 lg:[contain:size]",
+          )}
+        >
           {sectionRows.map((section) => (
             <div key={section.key} className="space-y-2">
               {sectionRows.length > 1 ? (

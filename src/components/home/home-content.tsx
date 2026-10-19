@@ -106,6 +106,9 @@ export function HomeContent() {
     : 0;
   // 分P 与合集剧集可能指向同一集，这里按 bvid:cid:page 去重，与批量建任务口径一致
   const selectedItemCount = video ? collectSelectedItems(video.bvid, selectedPages, selectedEpisodes).length : 0;
+  const showCollection = Boolean(collection && collectionEpisodeCount > 1);
+  // 分P 与合集列表同时存在时，只让最后一个列表卡填满剩余高度，避免两个列表把空白区域对半分。
+  const showParts = video ? video.pages.length > 1 : false;
 
   async function handleDownload() {
     const tasks = await createDownloads();
@@ -132,15 +135,20 @@ export function HomeContent() {
         <ParseResultSkeleton />
       ) : video ? (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
-          <div className="min-w-0 space-y-6">
-            <VideoCard
-              video={video}
-              parsed={parsed}
-              selectedPages={selectedPages}
-              selectedEpisodesCount={selectedEpisodes.length}
-            />
-            {collection && collectionEpisodeCount > 1 ? (
+          {/* 左栏用 flex 纵向排列：视频卡固定高度，列表卡在 lg 下拉满剩余高度，
+              避免右栏（下载选项 + 开始下载）更高时左下方留出大片空白。 */}
+          <div className="flex min-w-0 flex-col gap-6">
+            <div className="shrink-0">
+              <VideoCard
+                video={video}
+                parsed={parsed}
+                selectedPages={selectedPages}
+                selectedEpisodesCount={selectedEpisodes.length}
+              />
+            </div>
+            {showCollection && collection ? (
               <CollectionList
+                fill={!showParts}
                 title={collection.title}
                 sections={collection.sections}
                 currentEpisodeId={collection.currentEpisodeId}
@@ -151,8 +159,9 @@ export function HomeContent() {
                 onToggleAll={toggleAllEpisodes}
               />
             ) : null}
-            {video.pages.length > 1 ? (
+            {showParts ? (
               <PartsList
+                fill
                 pages={video.pages}
                 selectedPages={selectedPages.map((page) => page.page)}
                 disabled={parsing}
