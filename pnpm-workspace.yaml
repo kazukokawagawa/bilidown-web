@@ -1,3 +1,8 @@
+# pnpm 9.10.0 (used by Cloudflare Workers Builds) requires a non-empty `packages` field.
+# pnpm 11 wrote the allowBuilds placeholders below; decide them explicitly so it does not
+# regenerate the file with "set this to true or false" values.
 allowBuilds:
-  electron-winstaller: set this to true or false
-  unrs-resolver: set this to true or false
+  electron-winstaller: true
+  unrs-resolver: true
+packages:
+  - '.'
