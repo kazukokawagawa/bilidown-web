@@ -28,9 +28,9 @@ interface StatItemProps {
 function StatItem({ icon: Icon, label, value }: StatItemProps) {
   return (
     <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-xs">
-      <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-      <span className="text-muted-foreground">{label}</span>
-      <span className="ml-auto font-medium">{formatCount(value)}</span>
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}</span>
+      <span className="ml-auto whitespace-nowrap font-medium">{formatCount(value)}</span>
     </div>
   );
 }
@@ -124,7 +124,7 @@ export function VideoCard({ video, parsed, selectedPages, selectedEpisodesCount 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2">
             <StatItem icon={Play} label="播放" value={video.stat.view} />
             <StatItem icon={ThumbsUp} label="点赞" value={video.stat.like} />
             <StatItem icon={Star} label="收藏" value={video.stat.favorite} />

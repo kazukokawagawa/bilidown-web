@@ -37,11 +37,11 @@ export function ToolsView() {
       />
 
       <Tabs defaultValue="resolver" className="space-y-4">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-7">
+        <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-7">
           {TOOL_TABS.map((tab) => {
             const Icon = tab.icon;
             return (
-              <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5 py-2">
+              <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
                 <Icon className="h-4 w-4" />
                 {tab.label}
               </TabsTrigger>

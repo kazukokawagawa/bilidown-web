@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api, getErrorMessage } from "@/lib/api-client";
+import { selectionKey } from "@/lib/selection";
 import type {
   Codec,
   CollectionEpisode,
@@ -402,7 +403,7 @@ export function useVideo(): UseVideoResult {
     // 分P 与合集合并：按 bvid + cid + page 去重，分P优先。
     const planned = new Map<string, PlannedTask>();
     for (const page of selectedPages) {
-      const key = video.bvid + ":" + String(page.cid) + ":" + String(page.page);
+      const key = selectionKey(video.bvid, page.cid, page.page);
       if (planned.has(key)) continue;
       planned.set(key, {
         label: "第 " + String(page.page) + " P",
@@ -429,7 +430,7 @@ export function useVideo(): UseVideoResult {
       });
     }
     for (const episode of selectedEpisodes) {
-      const key = episode.bvid + ":" + String(episode.cid) + ":" + String(episode.page);
+      const key = selectionKey(episode.bvid, episode.cid, episode.page);
       if (planned.has(key)) continue;
       planned.set(key, {
         label: episode.title || "合集剧集",

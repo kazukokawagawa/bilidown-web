@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CODEC_NAMES, QUALITY_LABELS } from "@/lib/constants";
 import { formatBytes } from "@/lib/format";
+import { collectSelectedItems, selectionKey } from "@/lib/selection";
 import type { Codec, CollectionEpisode, StreamDetail, VideoInfo, VideoPage } from "@/lib/types";
 
 function playerUrl(bvid: string, page: number): string {
@@ -39,6 +40,13 @@ function episodesSummary(episodes: CollectionEpisode[], collectionTitle: string 
   return collectionTitle ? collectionTitle + "（" + count + "）" : count;
 }
 
+/** 选中条目数量文案：番剧/合集用「集」，多P用「个分P」，混合用「个条目」。 */
+function countText(count: number, pages: VideoPage[], episodes: CollectionEpisode[]): string {
+  if (episodes.length > 0 && pages.length === 0) return String(count) + " 集";
+  if (pages.length > 0 && episodes.length === 0) return String(count) + " 个分P";
+  return String(count) + " 个条目";
+}
+
 interface DownloadPanelProps {
   video: VideoInfo;
   pages: VideoPage[];
@@ -53,6 +61,8 @@ interface DownloadPanelProps {
   listFolder: boolean;
   ffmpegAvailable: boolean;
   stream: StreamDetail | null;
+  /** 取流所用的主分P（用于按条目时长折算预估体积） */
+  primaryPage: VideoPage | null;
   previewPageNumber?: number;
   creating: boolean;
   disabled: boolean;
@@ -73,13 +83,16 @@ export function DownloadPanel({
   listFolder,
   ffmpegAvailable,
   stream,
+  primaryPage,
   previewPageNumber,
   creating,
   disabled,
   onDownload,
 }: DownloadPanelProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
-  const totalCount = pages.length + episodes.length;
+  // 分P 与合集剧集合并去重，批量建任务与体积预估都按去重后的条目计算。
+  const sizeItems = collectSelectedItems(video.bvid, pages, episodes);
+  const selectedCount = sizeItems.length;
   // 无分P也可预览：回退到预览页码或第 1 P。
   const previewPage = previewPageNumber ?? pages[0]?.page ?? 1;
   const qualityName =
@@ -87,14 +100,48 @@ export function DownloadPanel({
   const codecName = codec ? CODEC_NAMES[codec] : "未知";
   const audioSize = stream?.audio?.size ?? 0;
   const videoSize = stream?.video?.size ?? 0;
-  const totalSize = audioOnly ? audioSize : audioSize + videoSize;
-  const sizeText = totalSize > 0 ? formatBytes(totalSize) + (totalCount > 1 ? " / 条目" : "") : "未知";
+  const singleItemSize = audioOnly ? audioSize : audioSize + videoSize;
+  // 取流所对应主分P的时长：服务端用该时长把 bandwidth 折算成单个条目的预估体积。
+  const referenceDuration =
+    primaryPage && primaryPage.duration > 0
+      ? primaryPage.duration
+      : video.pages[0] && video.pages[0].duration > 0
+        ? video.pages[0].duration
+        : video.duration;
+  // 同一清晰度/编码下各条目码率基本一致，按主分P码率 × 各条目时长累加得到总预估。
+  let bytesPerSecond = audioOnly
+    ? (stream?.audio?.bandwidth ?? 0) / 8
+    : ((stream?.audio?.bandwidth ?? 0) + (stream?.video?.bandwidth ?? 0)) / 8;
+  if (bytesPerSecond <= 0 && referenceDuration > 0) {
+    bytesPerSecond = singleItemSize / referenceDuration;
+  }
+  // 主分P 自身的体积直接用服务端返回值（更精确），其余条目按码率 × 时长折算。
+  const referenceKey = primaryPage ? selectionKey(video.bvid, primaryPage.cid, primaryPage.page) : null;
+  const estimatedSize =
+    selectedCount === 0
+      ? singleItemSize
+      : sizeItems.reduce((sum, item) => {
+          if (referenceKey !== null && item.key === referenceKey) return sum + singleItemSize;
+          if (item.duration > 0 && bytesPerSecond > 0) return sum + item.duration * bytesPerSecond;
+          return sum + singleItemSize;
+        }, 0);
+  const totalSize = Math.round(estimatedSize);
+  // 未选中时展示主分P 本身的体积；仅选中主分P 时也是精确值；其余单条为按码率折算的估算，加「约」提示。
+  const singleExact =
+    selectedCount === 0 ||
+    (selectedCount === 1 && referenceKey !== null && sizeItems[0].key === referenceKey);
+  const sizeText =
+    totalSize > 0
+      ? selectedCount > 1
+        ? "约 " + formatBytes(totalSize) + "（" + countText(selectedCount, pages, episodes) + "）"
+        : (singleExact ? "" : "约 ") + formatBytes(totalSize)
+      : "未知";
   const formatText = audioOnly
     ? "M4A 音频"
     : (embedSubtitles || embedDanmaku) && ffmpegAvailable
       ? "MKV 视频（可含内嵌字幕/弹幕）"
       : "MP4 视频";
-  const downloadLabel = totalCount > 1 ? "开始下载（" + String(totalCount) + " 个任务）" : "开始下载";
+  const downloadLabel = selectedCount > 1 ? "开始下载（" + String(selectedCount) + " 个任务）" : "开始下载";
 
   // 只有「列表批量」才会建子文件夹：合集多集，或多P视频勾选分P。
   const isListBatch = episodes.length > 0 || (pages.length > 0 && video.pages.length > 1);
@@ -124,7 +171,7 @@ export function DownloadPanel({
           <SummaryRow label="清晰度" value={qualityName} />
           <SummaryRow label="编码" value={audioOnly ? "仅音频" : codecName} />
           <SummaryRow label="格式" value={formatText} />
-          <SummaryRow label="预计大小" value={sizeText} />
+          <SummaryRow label={selectedCount > 1 ? "预计总大小" : "预计大小"} value={sizeText} />
         </div>
 
         <Button type="button" className="w-full" size="lg" onClick={onDownload} disabled={disabled || creating}>

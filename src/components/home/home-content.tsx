@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useVideo } from "@/hooks/use-video";
+import { collectSelectedItems } from "@/lib/selection";
 import { useSystemInfo } from "@/hooks/use-settings";
 import { CollectionList } from "./collection-list";
 import { DownloadPanel } from "./download-panel";
@@ -46,7 +47,6 @@ export function HomeContent() {
     selectedPages,
     selectedEpisodes,
     collection,
-    totalSelected,
     selectedPage,
     selectedQn,
     selectedCodec,
@@ -104,6 +104,8 @@ export function HomeContent() {
   const collectionEpisodeCount = collection
     ? collection.sections.reduce((count, section) => count + section.episodes.length, 0)
     : 0;
+  // 分P 与合集剧集可能指向同一集，这里按 bvid:cid:page 去重，与批量建任务口径一致
+  const selectedItemCount = video ? collectSelectedItems(video.bvid, selectedPages, selectedEpisodes).length : 0;
 
   async function handleDownload() {
     const tasks = await createDownloads();
@@ -173,7 +175,7 @@ export function HomeContent() {
               isLogin={isLogin}
               loading={streamsLoading || parsing}
               disabled={parsing}
-              selectedPartCount={totalSelected}
+              selectedPartCount={selectedItemCount}
               onQnChange={selectQn}
               onCodecChange={selectCodec}
               onAudioOnlyChange={setAudioOnly}
@@ -195,6 +197,7 @@ export function HomeContent() {
               listFolder={listFolder}
               ffmpegAvailable={ffmpegAvailable}
               stream={selectedStream}
+              primaryPage={selectedPage}
               previewPageNumber={selectedPage?.page}
               creating={creating}
               disabled={!canDownload}
