@@ -53,7 +53,9 @@ export function ParseInput({ value, loading, onChange, onParse }: ParseInputProp
           <Search className="wiggle-on-hover h-4 w-4" />
           解析视频
         </CardTitle>
-        <CardDescription>支持 BV 号 / av 号 / 视频链接 / b23.tv 短链 / 番剧 ep、ss</CardDescription>
+        <CardDescription>
+          支持 BV 号 / av 号 / 视频链接 / b23.tv 短链 / 番剧 ep、ss，可直接粘贴带中文标题的分享文案
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row">

@@ -3,6 +3,8 @@
  * 浏览器环境下 getDesktopBridge() 返回 null，所有桌面增强功能自动降级。
  */
 
+import { extractBilibiliTarget } from "@/lib/link-input";
+
 export interface DesktopInfo {
   version: string;
   platform: string;
@@ -69,26 +71,9 @@ export function isDesktopRuntime(): boolean {
   return getDesktopBridge() !== null;
 }
 
-const BILIBILI_LINK_PATTERNS: RegExp[] = [
-  /https?:\/\/(?:www\.|m\.|space\.)?bilibili\.com\/[^\s]+/i,
-  /https?:\/\/b23\.tv\/[^\s]+/i,
-  /https?:\/\/bili2233\.cn\/[^\s]+/i,
-  /(?:^|\s)(BV[0-9A-Za-z]{8,12})(?:\s|$)/,
-  /(?:^|\s)(av\d+)(?:\s|$)/i,
-  /(?:^|\s)(ep\d+)(?:\s|$)/i,
-  /(?:^|\s)(ss\d+)(?:\s|$)/i,
-];
-
-/** 从任意文本（剪贴板/协议链接）中提取 B 站链接或 ID。 */
+/** 从任意文本（剪贴板/协议链接）中提取 B 站链接或 ID；中文标题、全角标点不影响识别。 */
 export function extractBilibiliLink(text: string | null | undefined): string | null {
-  if (!text) return null;
-  const value = text.trim();
-  if (!value) return null;
-  for (const pattern of BILIBILI_LINK_PATTERNS) {
-    const match = pattern.exec(value);
-    if (match) return (match[1] ?? match[0]).trim();
-  }
-  return null;
+  return extractBilibiliTarget(text);
 }
 
 /** 解析 bilidown://parser?link=xxx 协议链接里的目标链接。 */

@@ -1,3 +1,4 @@
+import { extractShareInput } from "@/lib/link-input";
 import type { InputType, ParsedInput } from "@/lib/types";
 
 export const INPUT_TYPE_LABELS: Record<InputType, string> = {
@@ -9,11 +10,11 @@ export const INPUT_TYPE_LABELS: Record<InputType, string> = {
   url: "链接",
 };
 
-const BV_PATTERN = /BV1[1-9A-HJ-NP-Za-km-z]{9}/;
+const BV_PATTERN = /BV[0-9A-Za-z]{10}/i;
 
 /** 服务端 /api/bili/resolve 不可用时的本地降级解析 */
 export function parseInputLocally(raw: string): ParsedInput | null {
-  const input = raw.trim();
+  const input = extractShareInput(raw);
   if (!input) return null;
 
   const bv = input.match(BV_PATTERN);
@@ -32,7 +33,7 @@ export function parseInputLocally(raw: string): ParsedInput | null {
     if (Number.isSafeInteger(aid) && aid > 0) return { type: "av", aid };
   }
 
-  if (/b23\.tv\//i.test(input)) return { type: "b23", url: input };
+  if (/(?:b23\.tv|bili2233\.(?:cn|com))\//i.test(input)) return { type: "b23", url: input };
   if (/^https?:\/\//i.test(input)) return { type: "url", url: input };
 
   return null;

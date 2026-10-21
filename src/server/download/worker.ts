@@ -22,16 +22,24 @@ import { planOutputPath, reserveOutputPath, type NamingContext, type OutputExten
 /**
  * 单个下载任务的执行器（由 TaskManager 调用）。
  * 流程：刷新播放地址 -> 下载音视频到 .tmp/<taskId>/ -> 合并（可内嵌字幕为 MKV）-> 移动到下载目录。
- * 单个文件的下载支持多连接分片（Range），失败自动回退单连接。
+ * 单个文件采用动态分块的多连接下载（Range）：连接下完一块立刻领取下一块，
+ * 不再静态均分——避免快连接早早空转、整文件被最慢的一段拖住。
  */
 
 const MAX_URL_ATTEMPTS = 3;
-/** 单文件分片下载的最大并发段数（与设置项 downloadThreads 上限一致）。 */
+/** 单文件分块下载的最大并发连接数（与设置项 downloadThreads 上限一致）。 */
 const MAX_DOWNLOAD_THREADS = 8;
-/** 每个分片的最小字节数：文件较小时不值得分片。 */
-const MIN_SLICE_BYTES = 2 * 1024 * 1024;
-/** 单个分片的最大重试次数（每次从已写入位置续传）。 */
+/** 单个分块的最小/最大字节数：块太大无法动态均衡，太小则请求过多。 */
+const MIN_CHUNK_BYTES = 1 * 1024 * 1024;
+const MAX_CHUNK_BYTES = 8 * 1024 * 1024;
+/** 每个连接至少连续领取的块数（块数 = 连接数 × 该值）。 */
+const CHUNKS_PER_THREAD = 4;
+/** 分块总数上限：超大文件也不至于产生成千上万个 Range 请求。 */
+const MAX_CHUNKS = 384;
+/** 单个分块的最大重试次数（每次从已写入位置续传）。 */
 const MAX_PART_ATTEMPTS = 3;
+/** 单个连接空闲超时：这么久没有新数据就断开重连（从已写入位置续传）。 */
+const PART_IDLE_TIMEOUT_MS = 30_000;
 /** 最多内嵌的字幕轨道数。 */
 const MAX_EMBED_SUBTITLES = 3;
 
@@ -153,13 +161,6 @@ function normalizeThreads(threads: number): number {
   return Math.min(MAX_DOWNLOAD_THREADS, value);
 }
 
-interface DownloadPart {
-  start: number;
-  end: number;
-  /** 该分片已写入的字节数（重试时从这里续传） */
-  written: number;
-}
-
 /** 探测服务器是否支持 Range 并返回文件总大小；不支持/拿不到总大小返回 null。 */
 async function probeRangeTotal(
   url: string,
@@ -189,18 +190,25 @@ async function probeRangeTotal(
   }
 }
 
-/** 把总大小均分为 N 段（N = min(threads, 8, ceil(total/2MiB))，至少 1 段）。 */
-function planDownloadParts(total: number, threads: number): DownloadPart[] {
-  const byMinSlice = Math.ceil(total / MIN_SLICE_BYTES);
-  const count = Math.max(1, Math.min(threads, MAX_DOWNLOAD_THREADS, byMinSlice));
-  const partSize = Math.ceil(total / count);
-  const parts: DownloadPart[] = [];
-  for (let index = 0; index < count; index += 1) {
-    const start = index * partSize;
-    if (start >= total) break;
-    parts.push({ start, end: Math.min(total, start + partSize) - 1, written: 0 });
-  }
-  return parts;
+interface ChunkLayout {
+  /** 每块字节数（最后一块可能更小） */
+  chunkSize: number;
+  /** 总块数 */
+  count: number;
+}
+
+/**
+ * 动态分块规划：把文件切成较小的块，连接下完一块就领取下一块。
+ * 块大小 = clamp(total / (连接数 × 4), 1MiB, 8MiB)，并保证总块数不超过 MAX_CHUNKS；
+ * 文件太小（只有一块）时返回 count=1，由调用方回退单连接。
+ */
+function planChunkLayout(total: number, threads: number): ChunkLayout {
+  const workers = Math.max(1, Math.min(threads, MAX_DOWNLOAD_THREADS));
+  let chunkSize = Math.ceil(total / (workers * CHUNKS_PER_THREAD));
+  chunkSize = Math.max(MIN_CHUNK_BYTES, Math.min(MAX_CHUNK_BYTES, chunkSize));
+  chunkSize = Math.max(chunkSize, Math.ceil(total / MAX_CHUNKS));
+  chunkSize = Math.min(chunkSize, total);
+  return { chunkSize, count: Math.ceil(total / chunkSize) };
 }
 
 /** 定位写入完整一块数据：fs.write 可能只写入一部分，需要循环直到写完。 */
@@ -213,7 +221,7 @@ async function writeAt(handle: FileHandle, chunk: Uint8Array, position: number):
   }
 }
 
-interface DownloadInPartsOptions {
+interface DownloadInChunksOptions {
   label: string;
   url: string;
   headers: Record<string, string>;
@@ -224,33 +232,36 @@ interface DownloadInPartsOptions {
 }
 
 /**
- * 多线程分片下载：Range 探测 -> 均分 N 段并发定位写 -> 最终大小校验。
- * 返回 null 表示服务器不支持 Range 或文件太小，由调用方回退单连接（不视为失败）。
- * 任一分片失败会中断其它分片、关闭 handle、删除半成品后抛错，调用方再回退单连接。
+ * 动态分块多连接下载：Range 探测 -> 连接按需领取分块 -> 定位写入 -> 最终大小校验。
+ * - 连接下完当前块后立刻领取下一块（老连接结束就继续下一块，快连接不会空转）
+ * - 单个连接空闲超过 PART_IDLE_TIMEOUT_MS 会断开并重连，从已写入位置续传
+ * - 返回 null 表示服务器不支持 Range 或文件太小，由调用方回退单连接（不视为失败）
+ * - 任一块失败会中断其它块、关闭 handle、删除半成品后抛错，调用方再回退单连接
  */
-async function downloadInParts(
-  options: DownloadInPartsOptions,
+async function downloadInChunks(
+  options: DownloadInChunksOptions,
 ): Promise<{ bytes: number; total: number } | null> {
   const total = await probeRangeTotal(options.url, options.headers, options.signal);
   if (total === null) {
     console.log("[worker] 服务器不支持 Range，使用单连接");
     return null;
   }
-  const parts = planDownloadParts(total, options.threads);
-  if (parts.length <= 1) {
+  const layout = planChunkLayout(total, options.threads);
+  if (layout.count <= 1) {
     console.log(`[worker] ${options.label}文件较小（${total} 字节），使用单连接`);
     return null;
   }
+  const workers = Math.min(normalizeThreads(options.threads), layout.count);
   console.log(
-    `[worker] 分片下载：${parts.length} 段 · 总大小 ${total} 字节 · URL ${options.url.slice(0, 80)}`,
+    `[worker] 分块下载：${layout.count} 块 · ${workers} 个连接 · 块大小 ${layout.chunkSize} 字节 · 总大小 ${total} 字节`,
   );
 
   await ensureDir(path.dirname(options.destination));
   const handle = await fs.open(options.destination, "w");
-  const partsController = new AbortController();
-  const partsSignal = partsController.signal;
-  const forwardAbort = () => partsController.abort();
-  if (options.signal.aborted) partsController.abort();
+  const chunksController = new AbortController();
+  const chunksSignal = chunksController.signal;
+  const forwardAbort = () => chunksController.abort();
+  if (options.signal.aborted) chunksController.abort();
   else options.signal.addEventListener("abort", forwardAbort, { once: true });
 
   let closed = false;
@@ -260,41 +271,53 @@ async function downloadInParts(
     await handle.close().catch(() => undefined);
   };
   let downloadedBytes = 0;
+  let nextChunk = 0;
 
-  /** 单个分片：独立重试，每次从已写入位置续传。 */
-  const fetchPart = async (part: DownloadPart, index: number): Promise<void> => {
+  /** 下载单块：独立重试，每次从已写入位置续传；空闲超时会断开重连。 */
+  const downloadChunk = async (index: number): Promise<void> => {
+    const start = index * layout.chunkSize;
+    const end = Math.min(total, start + layout.chunkSize) - 1;
+    let written = 0;
+    let lastError: unknown = null;
+
     for (let attempt = 0; attempt < MAX_PART_ATTEMPTS; attempt += 1) {
       throwIfAborted(options.signal);
-      const start = part.start + part.written;
-      if (start > part.end) return;
+      if (start + written > end) return;
 
-      let response: Response;
+      const requestStart = start + written;
+      const chunkController = new AbortController();
+      const forwardChunkAbort = () => chunkController.abort();
+      if (chunksSignal.aborted) chunkController.abort();
+      else chunksSignal.addEventListener("abort", forwardChunkAbort, { once: true });
+
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+      let stalled = false;
+      const bumpIdleTimer = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          stalled = true;
+          chunkController.abort();
+        }, PART_IDLE_TIMEOUT_MS);
+      };
+
+      let response: Response | null = null;
       try {
+        bumpIdleTimer();
         response = await fetch(options.url, {
           method: "GET",
-          headers: { ...options.headers, Range: `bytes=${start}-${part.end}` },
+          headers: { ...options.headers, Range: `bytes=${requestStart}-${end}` },
           cache: "no-store",
           redirect: "follow",
-          signal: partsSignal,
+          signal: chunkController.signal,
         });
-      } catch (error) {
-        if (options.signal.aborted || partsSignal.aborted) throw error;
-        if (attempt + 1 >= MAX_PART_ATTEMPTS) {
-          throw new Error(`分片 ${index + 1}/${parts.length} 请求失败：${errorMessage(error)}`);
-        }
-        await delay(200 * (attempt + 1), partsSignal);
-        continue;
-      }
-
-      try {
-        // 必须校验 206 与 Content-Range 起点，避免服务器忽略 Range 时把整文件写到分片偏移
+        // 必须校验 206 与 Content-Range 起点，避免服务器忽略 Range 时把整文件写到分块偏移
         if (response.status !== 206) {
           throw new Error(`服务器未返回 206（HTTP ${response.status}）`);
         }
         const contentRange = response.headers.get("content-range");
         const rangeStart = parseContentRangeStart(contentRange);
-        if (rangeStart === null || rangeStart !== start) {
-          throw new Error(`Content-Range 起点不匹配（期望 ${start}，实际 ${String(rangeStart)}）`);
+        if (rangeStart === null || rangeStart !== requestStart) {
+          throw new Error(`Content-Range 起点不匹配（期望 ${requestStart}，实际 ${String(rangeStart)}）`);
         }
         const rangeTotal = parseContentRangeTotal(contentRange);
         if (rangeTotal !== null && rangeTotal !== total) {
@@ -304,38 +327,58 @@ async function downloadInParts(
 
         for await (const chunk of response.body) {
           if (!chunk.byteLength) continue;
-          const remaining = part.end + 1 - (part.start + part.written);
+          bumpIdleTimer();
+          const remaining = end + 1 - (start + written);
           const slice = chunk.byteLength > remaining ? chunk.subarray(0, remaining) : chunk;
-          await writeAt(handle, slice, part.start + part.written);
-          part.written += slice.byteLength;
+          await writeAt(handle, slice, start + written);
+          written += slice.byteLength;
           downloadedBytes += slice.byteLength;
           options.onBytes(downloadedBytes, total);
         }
-        if (part.start + part.written <= part.end) {
-          throw new Error(`分片下载不完整（${part.written}/${part.end - part.start + 1} 字节）`);
+        if (start + written <= end) {
+          throw new Error(`分块下载不完整（${written}/${end - start + 1} 字节）`);
         }
         return;
       } catch (error) {
-        await response.body?.cancel().catch(() => undefined);
+        await response?.body?.cancel().catch(() => undefined);
         // 取消/暂停立即抛出，不被重试循环吞掉
-        if (options.signal.aborted || partsSignal.aborted) throw error;
-        if (attempt + 1 >= MAX_PART_ATTEMPTS) {
-          throw new Error(`分片 ${index + 1}/${parts.length} 下载失败：${errorMessage(error)}`);
+        if (options.signal.aborted || chunksSignal.aborted) throw error;
+        lastError = error;
+        if (attempt + 1 >= MAX_PART_ATTEMPTS) break;
+        if (stalled) {
+          console.warn(
+            `[worker] ${options.label}分块 ${index + 1}/${layout.count} 空闲超时，重建连接续传（已写入 ${written} 字节）`,
+          );
         }
-        await delay(200 * (attempt + 1), partsSignal);
+        await delay(200 * (attempt + 1), chunksSignal);
+      } finally {
+        if (idleTimer) clearTimeout(idleTimer);
+        chunksSignal.removeEventListener("abort", forwardChunkAbort);
       }
+    }
+    throw new Error(`分块 ${index + 1}/${layout.count} 下载失败：${errorMessage(lastError)}`);
+  };
+
+  /** 单个连接的生命周期：领取一块 -> 下完 -> 立刻领取下一块，直到没有剩余块。 */
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      throwIfAborted(options.signal);
+      const index = nextChunk;
+      if (index >= layout.count) return;
+      nextChunk += 1;
+      await downloadChunk(index);
     }
   };
 
   try {
-    // 任一分片失败先中断其它分片，等全部结束后再关文件（Windows 上打开中的文件无法删除）
+    // 任一块失败先中断其它连接，等全部结束后再关文件（Windows 上打开中的文件无法删除）
     const failures: unknown[] = [];
     await Promise.all(
-      parts.map((part, index) =>
-        fetchPart(part, index).catch((error: unknown) => {
+      Array.from({ length: workers }, () =>
+        worker().catch((error: unknown) => {
           if (failures.length === 0) {
             failures.push(error);
-            partsController.abort();
+            chunksController.abort();
           }
         }),
       ),
@@ -344,7 +387,7 @@ async function downloadInParts(
 
     const stat = await handle.stat();
     if (stat.size !== total) {
-      throw new Error(`${options.label}分片下载文件大小校验失败（${stat.size}/${total} 字节）`);
+      throw new Error(`${options.label}分块下载文件大小校验失败（${stat.size}/${total} 字节）`);
     }
     return { bytes: total, total };
   } catch (error) {
@@ -352,7 +395,7 @@ async function downloadInParts(
     await fs.rm(options.destination, { force: true }).catch(() => undefined);
     throw error;
   } finally {
-    partsController.abort();
+    chunksController.abort();
     options.signal.removeEventListener("abort", forwardAbort);
     await closeHandle();
   }
@@ -371,7 +414,7 @@ interface DownloadFileOptions {
 
 /**
  * 下载单个文件。
- * - threads>1 且无可续传数据时：先尝试多线程分片，Range 不支持或分片失败自动回退单连接
+ * - threads>1 且无可续传数据时：先尝试动态分块多连接，Range 不支持或分块失败自动回退单连接
  * - 已有续传数据（暂停恢复）时：只走单连接 Range 续传，避免分片空洞
  * - 单连接：支持 Range 续传、backupUrl 依次切换、连接中断后重试
  */
@@ -393,10 +436,10 @@ async function downloadMediaFile(options: DownloadFileOptions): Promise<{ bytes:
       throwIfAborted(options.signal);
       const startSize = await fileSize(options.destination);
 
-      // 1) 多线程分片下载：仅从 0 开始时尝试
+      // 1) 动态分块多连接下载：仅从 0 开始时尝试
       if (threads > 1 && startSize === 0 && !forceSingle) {
         try {
-          const partResult = await downloadInParts({
+          const partResult = await downloadInChunks({
             label: options.label,
             url,
             headers: options.headers,
@@ -409,7 +452,7 @@ async function downloadMediaFile(options: DownloadFileOptions): Promise<{ bytes:
           forceSingle = true;
         } catch (error) {
           if (options.signal.aborted) throw error;
-          console.warn("[worker] 分片下载失败，回退单连接：" + errorMessage(error));
+          console.warn("[worker] 分块下载失败，回退单连接：" + errorMessage(error));
           forceSingle = true;
           lastError = error;
         }
@@ -546,13 +589,17 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
   const audioQualityId = selected.audioQuality?.id ?? 0;
   const audioQualityName = selected.audioQuality?.label ?? "自动";
   const audioKind = selected.audioQuality?.kind;
+  const expectsVideo = !task.audioOnly && Boolean(selected.video);
+  const expectsAudio = Boolean(selected.audio);
+  // 元数据估算的总大小（带宽 × 时长），仅作为两个流都上报前的临时分母
+  const expectedTotal = (selected.video?.size ?? 0) + (selected.audio?.size ?? 0);
   patch({
     qn: selected.qn,
     qualityName: selected.label,
     codec: selected.codec,
     audioQualityId,
     audioQualityName,
-    totalBytes: (selected.video?.size ?? 0) + (selected.audio?.size ?? 0),
+    totalBytes: expectedTotal,
   });
 
   if (!task.audioOnly && !selected.video) throw new Error("该视频没有可用的视频流");
@@ -564,11 +611,24 @@ export async function executeTask(context: TaskExecutionContext): Promise<Worker
   const videoTmp = path.join(tmpDir, "video.m4s");
   const audioTmp = path.join(tmpDir, "audio.m4s");
   const progress = { videoDone: 0, videoTotal: 0, audioDone: 0, audioTotal: 0 };
+  let totalBytes = expectedTotal;
+  /**
+   * 进度上报：分母（总大小）只增不减。
+   * 音视频是并发下载，各自第一批 onBytes 只带自己那份 total；
+   * 若直接相加就上报，分母会从「元数据总大小」瞬间掉成「单个流的大小」，
+   * 进度条就会先冲高再回落（左右抽动）。这里等两个流都上报后再以实测总大小为准。
+   */
   const reportProgress = () => {
-    patch({
-      downloadedBytes: progress.videoDone + progress.audioDone,
-      totalBytes: progress.videoTotal + progress.audioTotal,
-    });
+    const downloaded = progress.videoDone + progress.audioDone;
+    const measuredTotal = progress.videoTotal + progress.audioTotal;
+    const allStreamsKnown =
+      (!expectsVideo || progress.videoTotal > 0) && (!expectsAudio || progress.audioTotal > 0);
+    if (allStreamsKnown) {
+      if (measuredTotal > 0) totalBytes = Math.max(measuredTotal, downloaded);
+    } else if (expectedTotal > 0) {
+      totalBytes = Math.max(totalBytes, measuredTotal);
+    }
+    patch({ downloadedBytes: downloaded, totalBytes });
   };
   const threads = normalizeThreads(settings.downloadThreads);
 

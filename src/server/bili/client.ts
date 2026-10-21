@@ -11,6 +11,7 @@ import {
   QUALITY_LABELS,
 } from "@/lib/constants";
 import { stripHtml } from "@/lib/format";
+import { extractShareInput } from "@/lib/link-input";
 import type {
   AudioQualityKind,
   AudioQualityOption,
@@ -203,9 +204,9 @@ async function fetchBiliJson<T>(
 
 /* ---------------------------------------------------------------- 输入解析 */
 
-/** 同步解析用户输入（BV / av / ep / ss / b23 短链 / 普通链接）。 */
+/** 同步解析用户输入（BV / av / ep / ss / b23 短链 / 普通链接）；支持带中文标题的分享文案。 */
 export function parseInput(input: string): ParsedInput {
-  const raw = input.trim();
+  const raw = extractShareInput(input);
   if (!raw) throw new BiliApiError("请输入视频链接、BV 号或 av 号", { status: 400, code: "INVALID_INPUT" });
 
   if (SHORT_LINK_PATTERN.test(raw)) {

@@ -213,7 +213,7 @@ export function DownloadSettingsCard({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              单个音/视频文件的多连接下载线程数（1-8），1 为单连接
+              单个音/视频文件的多连接下载线程数（1-8），1 为单连接；连接下完一块会自动领取下一块
             </p>
           </div>
 

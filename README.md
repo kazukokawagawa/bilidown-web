@@ -69,7 +69,7 @@ npm run electron:build
 
 | 路由 | 功能 |
 |---|---|
-| `/` 首页 | 解析任意输入（BV/av/链接/b23 短链/ep/ss）→ 展示视频信息、封面、UP主、统计、**分P列表、合集（ugc_season）与番剧 season 剧集列表（正片 + PV/预告等小节）** → 勾选分P/合集/剧集批量下载（**多选时下载面板按各条目时长汇总「预计总大小」**）、清晰度、编码（AVC/HEVC/AV1）、**音频质量（自动 / Hi-Res 无损 / 杜比全景声 / 192K / 132K / 64K）**、仅音频、**内嵌弹幕 / 单独保存弹幕文件** → 批量创建下载任务（列表下载按列表名建子文件夹）；官方 iframe 在线预览；**单P视频（无分P/合集列表）左栏展示完整详情卡：完整简介、全部数据、视频参数、B站标签与下载提示，卡片与右栏底部对齐不留空白**；最近任务 |
+| `/` 首页 | 解析任意输入（BV/av/链接/b23 短链/ep/ss，**可直接粘贴带中文标题的分享文案**）→ 展示视频信息、封面、UP主、统计、**分P列表、合集（ugc_season）与番剧 season 剧集列表（正片 + PV/预告等小节）** → 勾选分P/合集/剧集批量下载（**多选时下载面板按各条目时长汇总「预计总大小」**）、清晰度、编码（AVC/HEVC/AV1）、**音频质量（自动 / Hi-Res 无损 / 杜比全景声 / 192K / 132K / 64K）**、仅音频、**内嵌弹幕 / 单独保存弹幕文件** → 批量创建下载任务（列表下载按列表名建子文件夹）；官方 iframe 在线预览；**单P视频（无分P/合集列表）左栏展示完整详情卡：完整简介、全部数据、视频参数、B站标签与下载提示，卡片与右栏底部对齐不留空白**；最近任务 |
 | `/search` 搜索 | **增强功能**（原桌面版没有关键词搜索接口）：B站关键词搜索（视频/UP主、排序、分页）；搜索不可用时可直接回首页粘贴链接 |
 | `/downloads` 下载 | 任务统计 + 状态 Tabs；实时进度（SSE）、速度、剩余时间；暂停/继续/取消/重试/删除；下载文件、复制路径；**列表名 / 内嵌弹幕 / 弹幕文件徽标与弹幕数量、弹幕文件夹路径**；**服务端无 ffmpeg 时的「浏览器合并」（ffmpeg.wasm，手机网页端可用）与音视频分片单独下载**；导出/导入 JSON、清理已完成、清空全部 |
 | `/account` 账号 | B站扫码登录（服务端保存 Cookie）、用户信息、退出登录；登录后可下载 1080P+ 等高清清晰度 |
@@ -82,7 +82,7 @@ npm run electron:build
 2. 取流 → `/api/bili/streams`（`/x/player/playurl?fnval=4048&fourk=1&fnver=0`，解析 DASH video/audio，支持 112/116 补拉、Hi-Res/杜比音频；audioQualityId 指定音频质量，0 表示自动）
 3. 建任务 → `POST /api/tasks`，服务端下载引擎：
    - 用当前登录 Cookie 重新取流（不信任过期直链）
-   - 流式下载 video/audio 到 `downloads/.tmp/<taskId>/`，支持 backupUrl 切换、Range 续传、暂停/取消
+   - 流式下载 video/audio 到 `downloads/.tmp/<taskId>/`，支持 backupUrl 切换、Range 续传、暂停/取消；多连接下载采用**动态分块**（连接下完一块立刻领取下一块，空闲超时自动断开重连续传）
    - 需要时拉取 B 站 CC 字幕（SRT）与弹幕 XML，弹幕转 ASS；`ffmpeg` 合并音视频并把字幕/弹幕封装为 MKV 软字幕轨道（无 ffmpeg 时回退 MP4/M4A）
    - `ffmpeg -y -i video.m4s -i audio.m4s -c copy -movflags +faststart <name>.mp4` 合并（仅音频则直接保存 .m4a；选 Hi-Res 无损音轨时转封装为 .flac，无 ffmpeg/转封装失败时回退保存 .m4s 并提示）
    - 服务端没有 ffmpeg（或设置里关闭了合并）时，任务输出 `<name>.video.m4s` + `<name>.audio.m4s`（`format=m4s`）；下载页任务行提供「浏览器合并」：从 `/api/tasks/[id]/file?part=video|audio` 取回分片，在浏览器内用 ffmpeg.wasm `-c copy` 合成 MP4（容器不支持时自动回退 MKV）并直接保存到设备
